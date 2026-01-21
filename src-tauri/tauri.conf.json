@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mycowork",
+  "productName": "ohmycowork",
   "version": "0.1.0",
-  "identifier": "com.xnu.mycowork",
+  "identifier": "com.ohmyco.work",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "mycowork",
+        "title": "Oh My Cowork",
         "width": 1100,
         "height": 800,
         "backgroundColor": "#0A0A0A"
