@@ -18,6 +18,8 @@ export default defineConfig(async () => ({
         "./src/shims/child_process",
         import.meta.url
       ).pathname,
+      "node:os": new URL("./src/shims/os", import.meta.url).pathname,
+      os: new URL("./src/shims/os", import.meta.url).pathname,
     },
   },
 

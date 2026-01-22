@@ -17,8 +17,17 @@ export const join = (...segments: string[]) =>
     .join("/")
     .replace(/^/, "/");
 
-export default {
+const posix = {
   basename,
   dirname,
   join,
 };
+
+export default {
+  basename,
+  dirname,
+  join,
+  posix,
+};
+
+export { posix };
