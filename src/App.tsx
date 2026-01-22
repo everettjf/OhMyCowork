@@ -31,8 +31,9 @@ import {
 } from "@/components/ui/dialog";
 import { ChatOpenAI } from "@langchain/openai";
 import { open } from "@tauri-apps/plugin-dialog";
-import { mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { appDataDir, join } from "@tauri-apps/api/path";
+import { readDir } from "@tauri-apps/plugin-fs";
+import { Store } from "@tauri-apps/plugin-store";
+import { join } from "@tauri-apps/api/path";
 import {
   ChevronDown,
   ChevronRight,
@@ -48,7 +49,7 @@ import { NoopBackend } from "@/lib/agent-backend";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
-const SETTINGS_FILENAME = "settings.json";
+const SETTINGS_STORE = "settings.json";
 
 type Thread = {
   id: string;
@@ -99,6 +100,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [workspaceEntries, setWorkspaceEntries] = useState<
     Record<string, WorkspaceEntry[]>
   >({});
@@ -110,19 +112,20 @@ function App() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const baseDir = await appDataDir();
-        await mkdir(baseDir, { recursive: true });
-        const settingsPath = await join(baseDir, SETTINGS_FILENAME);
-        const contents = await readTextFile(settingsPath);
-        const parsed = JSON.parse(contents) as {
-          openRouterApiKey?: string;
-          openRouterModel?: string;
-        };
-        setOpenRouterApiKey(parsed.openRouterApiKey ?? "");
-        setOpenRouterModel(parsed.openRouterModel ?? OPENROUTER_DEFAULT_MODEL);
-      } catch {
+        const store = await Store.load(SETTINGS_STORE);
+        const storedKey = (await store.get<string>("openRouterApiKey")) ?? "";
+        const storedModel =
+          (await store.get<string>("openRouterModel")) ??
+          OPENROUTER_DEFAULT_MODEL;
+        setOpenRouterApiKey(storedKey);
+        setOpenRouterModel(storedModel);
+        setSettingsError(null);
+      } catch (error) {
         setOpenRouterApiKey("");
         setOpenRouterModel(OPENROUTER_DEFAULT_MODEL);
+        setSettingsError(
+          error instanceof Error ? error.message : "Failed to load settings."
+        );
       } finally {
         setSettingsLoaded(true);
       }
@@ -136,25 +139,22 @@ function App() {
     setDraftModel(openRouterModel);
   }, [openRouterApiKey, openRouterModel, settingsLoaded]);
 
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    const persistSettings = async () => {
-      try {
-        const baseDir = await appDataDir();
-        await mkdir(baseDir, { recursive: true });
-        const settingsPath = await join(baseDir, SETTINGS_FILENAME);
-        const payload = JSON.stringify(
-          { openRouterApiKey, openRouterModel },
-          null,
-          2
-        );
-        await writeTextFile(settingsPath, payload);
-      } catch {
-        return;
-      }
-    };
-    void persistSettings();
-  }, [openRouterApiKey, openRouterModel, settingsLoaded]);
+  const saveSettings = async (apiKey: string, model: string) => {
+    try {
+      const store = await Store.load(SETTINGS_STORE);
+      await store.set("openRouterApiKey", apiKey);
+      await store.set("openRouterModel", model || OPENROUTER_DEFAULT_MODEL);
+      await store.save();
+      setOpenRouterApiKey(apiKey);
+      setOpenRouterModel(model || OPENROUTER_DEFAULT_MODEL);
+      setSettingsError(null);
+      setSettingsOpen(false);
+    } catch (error) {
+      setSettingsError(
+        error instanceof Error ? error.message : "Failed to save settings."
+      );
+    }
+  };
 
   const filteredThreads = useMemo(() => {
     const query = threadQuery.trim().toLowerCase();
@@ -669,6 +669,9 @@ function App() {
                 placeholder="openai/gpt-4o-mini"
               />
             </div>
+            {settingsError ? (
+              <div className="text-xs text-destructive">{settingsError}</div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -676,6 +679,7 @@ function App() {
               onClick={() => {
                 setDraftApiKey(openRouterApiKey);
                 setDraftModel(openRouterModel);
+                setSettingsError(null);
                 setSettingsOpen(false);
               }}
             >
@@ -683,9 +687,7 @@ function App() {
             </Button>
             <Button
               onClick={() => {
-                setOpenRouterApiKey(draftApiKey);
-                setOpenRouterModel(draftModel || OPENROUTER_DEFAULT_MODEL);
-                setSettingsOpen(false);
+                void saveSettings(draftApiKey, draftModel);
               }}
             >
               Save
