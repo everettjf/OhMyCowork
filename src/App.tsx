@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -20,94 +21,99 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Folder, MessageSquare, Plus, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ChatOpenAI } from "@langchain/openai";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readDir } from "@tauri-apps/plugin-fs";
+import { join } from "@tauri-apps/api/path";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  MessageSquare,
+  Plus,
+  Search,
+  Settings,
+} from "lucide-react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
+
+type Thread = {
+  id: string;
+  title: string;
+  unread: number;
+  workspacePath?: string | null;
+};
+
+type Message = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  timestamp: string;
+};
+
+type WorkspaceEntry = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+};
 
 function App() {
-  const [threads, setThreads] = useState([
-    { id: "t-1", title: "Product spec draft", unread: 2 },
-    { id: "t-2", title: "Bug triage notes", unread: 0 },
-    { id: "t-3", title: "Onboarding Q&A", unread: 5 },
-    { id: "t-4", title: "Design review", unread: 0 },
-  ]);
-  const [folders, setFolders] = useState([
-    { id: "f-1", name: "Personal", count: 12 },
-    { id: "f-2", name: "Work", count: 34 },
-    { id: "f-3", name: "Archive", count: 9 },
+  const [threads, setThreads] = useState<Thread[]>([
+    { id: "t-1", title: "Welcome", unread: 0, workspacePath: null },
   ]);
   const [activeThreadId, setActiveThreadId] = useState("t-1");
   const [threadQuery, setThreadQuery] = useState("");
-  const [folderQuery, setFolderQuery] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
-  const [messagesByThread, setMessagesByThread] = useState(() => ({
+  const [messagesByThread, setMessagesByThread] = useState<
+    Record<string, Message[]>
+  >(() => ({
     "t-1": [
       {
         id: "m-1",
-        role: "user",
-        text: "Draft a feature overview for our next release.",
-        timestamp: "09:18",
-      },
-      {
-        id: "m-2",
         role: "assistant",
-        text: "Sure. I’ll outline goals, key flows, and a brief timeline.",
-        timestamp: "09:18",
-      },
-      {
-        id: "m-3",
-        role: "user",
-        text: "Include risks and open questions too.",
-        timestamp: "09:19",
-      },
-      {
-        id: "m-4",
-        role: "assistant",
-        text: "Noted. I’ll add a risk matrix and unanswered items.",
-        timestamp: "09:19",
-      },
-    ],
-    "t-2": [
-      {
-        id: "m-5",
-        role: "user",
-        text: "Can we bundle the login fix with the next patch?",
-        timestamp: "昨天",
-      },
-      {
-        id: "m-6",
-        role: "assistant",
-        text: "Yes, as long as QA clears it today.",
-        timestamp: "昨天",
-      },
-    ],
-    "t-3": [
-      {
-        id: "m-7",
-        role: "user",
-        text: "What should new hires read first?",
-        timestamp: "周一",
-      },
-      {
-        id: "m-8",
-        role: "assistant",
-        text: "Start with the roadmap and the engineering playbook.",
-        timestamp: "周一",
-      },
-    ],
-    "t-4": [
-      {
-        id: "m-9",
-        role: "user",
-        text: "Please review the new empty state comps.",
-        timestamp: "周二",
+        text: "Pick a workspace folder, then start the conversation.",
+        timestamp: "Just now",
       },
     ],
   }));
-  const activeThreadIdRef = useRef(activeThreadId);
+  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
+  const [openRouterModel, setOpenRouterModel] = useState(
+    OPENROUTER_DEFAULT_MODEL
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [workspaceEntries, setWorkspaceEntries] = useState<
+    Record<string, WorkspaceEntry[]>
+  >({});
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   useEffect(() => {
-    activeThreadIdRef.current = activeThreadId;
-  }, [activeThreadId]);
+    const storedKey = localStorage.getItem("openrouter.apiKey") ?? "";
+    const storedModel =
+      localStorage.getItem("openrouter.model") ?? OPENROUTER_DEFAULT_MODEL;
+    setOpenRouterApiKey(storedKey);
+    setOpenRouterModel(storedModel);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("openrouter.apiKey", openRouterApiKey);
+    localStorage.setItem("openrouter.model", openRouterModel);
+  }, [openRouterApiKey, openRouterModel]);
 
   const filteredThreads = useMemo(() => {
     const query = threadQuery.trim().toLowerCase();
@@ -117,37 +123,50 @@ function App() {
     );
   }, [threadQuery, threads]);
 
-  const filteredFolders = useMemo(() => {
-    const query = folderQuery.trim().toLowerCase();
-    if (!query) return folders;
-    return folders.filter((folder) =>
-      folder.name.toLowerCase().includes(query)
-    );
-  }, [folderQuery, folders]);
-
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId),
     [activeThreadId, threads]
   );
 
   const activeMessages = messagesByThread[activeThreadId] ?? [];
+  const activeWorkspacePath = activeThread?.workspacePath ?? null;
 
-  const createThread = (title: string) => {
-    const id = `t-${Date.now()}`;
-    setThreads((prev) => [{ id, title, unread: 0 }, ...prev]);
-    setMessagesByThread((prev) => ({
+  const loadDirectory = useCallback(async (path: string) => {
+    try {
+      setWorkspaceError(null);
+      const entries = await readDir(path);
+      const mappedEntries = await Promise.all(
+        entries.map(async (entry) => ({
+          name: entry.name,
+          path: await join(path, entry.name),
+          isDirectory: entry.isDirectory,
+          isFile: entry.isFile,
+        }))
+      );
+      mappedEntries.sort((a, b) => {
+        if (a.isDirectory === b.isDirectory) {
+          return a.name.localeCompare(b.name);
+        }
+        return a.isDirectory ? -1 : 1;
+      });
+      setWorkspaceEntries((prev) => ({ ...prev, [path]: mappedEntries }));
+    } catch (error) {
+      setWorkspaceError(
+        error instanceof Error ? error.message : "Failed to read folder"
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeWorkspacePath) return;
+    if (!workspaceEntries[activeWorkspacePath]) {
+      loadDirectory(activeWorkspacePath);
+    }
+    setExpandedPaths((prev) => ({
       ...prev,
-      [id]: [
-        {
-          id: `m-${Date.now() + 1}`,
-          role: "assistant",
-          text: "New thread is ready. What should we work on?",
-          timestamp: "刚刚",
-        },
-      ],
+      [activeWorkspacePath]: prev[activeWorkspacePath] ?? true,
     }));
-    setActiveThreadId(id);
-  };
+  }, [activeWorkspacePath, loadDirectory, workspaceEntries]);
 
   const handleSelectThread = (threadId: string) => {
     setActiveThreadId(threadId);
@@ -158,65 +177,243 @@ function App() {
     );
   };
 
-  const handleSendMessage = () => {
+  const handleSelectWorkspace = async (threadId: string) => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select workspace folder",
+    });
+    if (!selected || Array.isArray(selected)) return;
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === threadId
+          ? { ...thread, workspacePath: selected }
+          : thread
+      )
+    );
+    setExpandedPaths((prev) => ({ ...prev, [selected]: true }));
+    await loadDirectory(selected);
+  };
+
+  const createThread = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select workspace folder",
+    });
+    if (!selected || Array.isArray(selected)) return;
+    const id = `t-${Date.now()}`;
+    const workspaceName = selected.split(/[/\\]/).filter(Boolean).pop();
+    const title = workspaceName ? `Thread - ${workspaceName}` : "New thread";
+    setThreads((prev) => [
+      { id, title, unread: 0, workspacePath: selected },
+      ...prev,
+    ]);
+    setMessagesByThread((prev) => ({
+      ...prev,
+      [id]: [
+        {
+          id: `m-${Date.now() + 1}`,
+          role: "assistant",
+          text: "Workspace loaded. What do you want to build?",
+          timestamp: "Just now",
+        },
+      ],
+    }));
+    setActiveThreadId(id);
+    setExpandedPaths((prev) => ({ ...prev, [selected]: true }));
+    await loadDirectory(selected);
+  };
+
+  const toggleDirectory = async (path: string) => {
+    const isExpanded = !!expandedPaths[path];
+    setExpandedPaths((prev) => ({ ...prev, [path]: !isExpanded }));
+    if (!isExpanded && !workspaceEntries[path]) {
+      await loadDirectory(path);
+    }
+  };
+
+  const formatMessageContent = (content: unknown) => {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (typeof item === "object" && item && "text" in item) {
+            return String(item.text ?? "");
+          }
+          return "";
+        })
+        .join("");
+    }
+    if (content == null) return "";
+    return String(content);
+  };
+
+  const handleSendMessage = async () => {
+    if (isSending) return;
     const trimmed = messageDraft.trim();
     if (!trimmed) return;
-    const targetThreadId = activeThreadId;
+    if (!openRouterApiKey || !openRouterModel) {
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [activeThreadId]: [
+          ...(prev[activeThreadId] ?? []),
+          {
+            id: `m-${Date.now()}`,
+            role: "system",
+            text: "OpenRouter key or model missing. Open settings to configure.",
+            timestamp: "Just now",
+          },
+        ],
+      }));
+      return;
+    }
+
     const now = new Date();
     const timestamp = now.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const userMessage = {
+    const userMessage: Message = {
       id: `m-${Date.now()}`,
       role: "user",
       text: trimmed,
       timestamp,
     };
+    const targetThreadId = activeThreadId;
+    const threadMessages = messagesByThread[targetThreadId] ?? [];
 
     setMessageDraft("");
+    setIsSending(true);
     setMessagesByThread((prev) => ({
       ...prev,
       [targetThreadId]: [...(prev[targetThreadId] ?? []), userMessage],
     }));
 
-    const replies = [
-      "Got it. I’ll take a first pass and share a draft.",
-      "Understood. I can prototype that flow next.",
-      "Thanks! I’ll add that to the plan and follow up.",
-      "Sounds good. I’ll sync with the team and report back.",
-    ];
-    const replyText = replies[Math.floor(Math.random() * replies.length)];
+    try {
+      const model = new ChatOpenAI({
+        apiKey: openRouterApiKey,
+        model: openRouterModel,
+        configuration: {
+          baseURL: OPENROUTER_BASE_URL,
+          dangerouslyAllowBrowser: true,
+          defaultHeaders: {
+            "HTTP-Referer": "https://ohmycowork.local",
+            "X-Title": "Oh My Cowork",
+          },
+        },
+      });
 
-    setTimeout(() => {
-      const replyMessage = {
-        id: `m-${Date.now() + 2}`,
-        role: "assistant",
-        text: replyText,
-        timestamp: "刚刚",
-      };
+      const { createDeepAgent } = await import("deepagents");
+      const agent = createDeepAgent({
+        model,
+        systemPrompt: activeWorkspacePath
+          ? `You are a helpful coworker assistant. The current workspace root is ${activeWorkspacePath}.`
+          : "You are a helpful coworker assistant.",
+      });
+
+      const result = await agent.invoke({
+        messages: [...threadMessages, userMessage]
+          .filter((message) => message.role !== "system")
+          .map((message) => ({
+            role: message.role,
+            content: message.text,
+          })),
+      });
+
+      const messages = (result as { messages?: Array<{ content?: unknown }> })
+        .messages;
+      const lastMessage = messages?.[messages.length - 1];
+      const assistantText = formatMessageContent(lastMessage?.content);
+
       setMessagesByThread((prev) => ({
         ...prev,
-        [targetThreadId]: [...(prev[targetThreadId] ?? []), replyMessage],
+        [targetThreadId]: [
+          ...(prev[targetThreadId] ?? []),
+          {
+            id: `m-${Date.now() + 1}`,
+            role: "assistant",
+            text: assistantText || "No response from model.",
+            timestamp: "Just now",
+          },
+        ],
       }));
-      setThreads((prev) =>
-        prev.map((thread) => {
-          if (thread.id !== targetThreadId) return thread;
-          if (activeThreadIdRef.current === targetThreadId) {
-            return { ...thread, unread: 0 };
-          }
-          return { ...thread, unread: thread.unread + 1 };
-        })
-      );
-    }, 600);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [targetThreadId]: [
+          ...(prev[targetThreadId] ?? []),
+          {
+            id: `m-${Date.now() + 1}`,
+            role: "system",
+            text: `Agent error: ${message}`,
+            timestamp: "Just now",
+          },
+        ],
+      }));
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const handleCreateFolder = () => {
-    const id = `f-${Date.now()}`;
-    setFolders((prev) => [
-      { id, name: `New folder ${prev.length + 1}`, count: 0 },
-      ...prev,
-    ]);
+  const renderWorkspaceEntries = (path: string, depth = 0) => {
+    const entries = workspaceEntries[path];
+    if (!entries) {
+      return (
+        <div className="py-2 text-xs text-muted-foreground">
+          Loading folder...
+        </div>
+      );
+    }
+
+    if (entries.length === 0) {
+      return (
+        <div className="py-2 text-xs text-muted-foreground">
+          Empty folder
+        </div>
+      );
+    }
+
+    return entries.map((entry) => {
+      const isExpanded = !!expandedPaths[entry.path];
+      const paddingLeft = 12 + depth * 16;
+
+      if (entry.isDirectory) {
+        return (
+          <div key={entry.path}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-md py-1 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              style={{ paddingLeft }}
+              onClick={() => toggleDirectory(entry.path)}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+              <Folder className="h-3.5 w-3.5" />
+              <span className="truncate">{entry.name}</span>
+            </button>
+            {isExpanded ? renderWorkspaceEntries(entry.path, depth + 1) : null}
+          </div>
+        );
+      }
+
+      return (
+        <div
+          key={entry.path}
+          className="flex items-center gap-2 py-1 text-xs text-muted-foreground"
+          style={{ paddingLeft: paddingLeft + 18 }}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          <span className="truncate">{entry.name}</span>
+        </div>
+      );
+    });
   };
 
   return (
@@ -226,13 +423,13 @@ function App() {
           <div className="flex items-center justify-between gap-2 px-1">
             <div className="text-sm font-semibold">Threads</div>
             <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={() => createThread("Untitled thread")}
+              size="sm"
+              variant="outline"
+              className="h-7 px-2"
+              onClick={createThread}
             >
-              <Plus className="h-4 w-4" />
-              <span className="sr-only">New thread</span>
+              <Plus className="mr-1 h-4 w-4" />
+              New thread
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -269,6 +466,16 @@ function App() {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
+        <SidebarFooter>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Settings
+          </Button>
+        </SidebarFooter>
         <SidebarRail />
       </Sidebar>
 
@@ -284,13 +491,9 @@ function App() {
                 </div>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => createThread("New chat")}
-            >
-              New chat
-            </Button>
+            <div className="text-right text-xs text-muted-foreground">
+              Model: {openRouterModel || "Not configured"}
+            </div>
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
@@ -309,16 +512,24 @@ function App() {
                         className={`rounded-lg border p-3 text-sm ${
                           message.role === "user"
                             ? "bg-muted/40"
-                            : "bg-background"
+                            : message.role === "system"
+                              ? "border-destructive/40 bg-destructive/10 text-destructive"
+                              : "bg-background"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                           <span>
-                            {message.role === "user" ? "You" : "Assistant"}
+                            {message.role === "user"
+                              ? "You"
+                              : message.role === "assistant"
+                                ? "Assistant"
+                                : "System"}
                           </span>
                           <span>{message.timestamp}</span>
                         </div>
-                        <div className="mt-2">{message.text}</div>
+                        <div className="mt-2 whitespace-pre-wrap">
+                          {message.text}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -338,8 +549,11 @@ function App() {
                     handleSendMessage();
                   }
                 }}
+                disabled={isSending}
               />
-              <Button onClick={handleSendMessage}>Send</Button>
+              <Button onClick={handleSendMessage} disabled={isSending}>
+                {isSending ? "Sending..." : "Send"}
+              </Button>
             </div>
           </div>
         </div>
@@ -347,45 +561,78 @@ function App() {
 
       <Sidebar side="right" collapsible="none" variant="sidebar">
         <SidebarHeader>
-          <div className="flex items-center justify-between gap-2 px-1">
-            <div className="text-sm font-semibold">Folders</div>
+          <div className="flex items-start justify-between gap-2 px-1">
+            <div>
+              <div className="text-sm font-semibold">Workspace</div>
+              <div className="text-xs text-muted-foreground">
+                {activeWorkspacePath ?? "No workspace selected"}
+              </div>
+            </div>
             <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={handleCreateFolder}
+              size="sm"
+              variant="outline"
+              onClick={() => handleSelectWorkspace(activeThreadId)}
             >
-              <Plus className="h-4 w-4" />
-              <span className="sr-only">New folder</span>
+              {activeWorkspacePath ? "Change" : "Open"}
             </Button>
           </div>
-          <Input
-            placeholder="Filter folders"
-            className="h-8"
-            value={folderQuery}
-            onChange={(event) => setFolderQuery(event.target.value)}
-          />
+          {workspaceError ? (
+            <div className="text-xs text-destructive">{workspaceError}</div>
+          ) : null}
         </SidebarHeader>
         <SidebarSeparator />
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Library</SidebarGroupLabel>
+            <SidebarGroupLabel>Files</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
-                {filteredFolders.map((folder) => (
-                  <SidebarMenuItem key={folder.id}>
-                    <SidebarMenuButton>
-                      <Folder className="h-4 w-4" />
-                      <span>{folder.name}</span>
-                    </SidebarMenuButton>
-                    <SidebarMenuBadge>{folder.count}</SidebarMenuBadge>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
+              <ScrollArea className="max-h-[70vh] pr-2">
+                {activeWorkspacePath ? (
+                  <div className="space-y-1">
+                    {renderWorkspaceEntries(activeWorkspacePath)}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    Choose a folder to browse its contents.
+                  </div>
+                )}
+              </ScrollArea>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
       </Sidebar>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>System settings</DialogTitle>
+            <DialogDescription>
+              Configure OpenRouter credentials and default model.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium">OpenRouter API Key</label>
+              <Input
+                type="password"
+                value={openRouterApiKey}
+                onChange={(event) => setOpenRouterApiKey(event.target.value)}
+                placeholder="sk-or-..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium">Model</label>
+              <Input
+                value={openRouterModel}
+                onChange={(event) => setOpenRouterModel(event.target.value)}
+                placeholder="openai/gpt-4o-mini"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSettingsOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   );
 }

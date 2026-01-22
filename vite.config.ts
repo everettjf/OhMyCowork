@@ -10,6 +10,14 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,
+      "node:async_hooks": new URL("./src/shims/async_hooks", import.meta.url)
+        .pathname,
+      "node:path": new URL("./src/shims/path", import.meta.url).pathname,
+      path: new URL("./src/shims/path", import.meta.url).pathname,
+      "node:child_process": new URL(
+        "./src/shims/child_process",
+        import.meta.url
+      ).pathname,
     },
   },
 
