@@ -355,14 +355,21 @@ function App() {
           : "You are a helpful coworker assistant.",
       });
 
-      const result = await agent.invoke({
-        messages: [...threadMessages, userMessage]
-          .filter((message) => message.role !== "system")
-          .map((message) => ({
-            role: message.role,
-            content: message.text,
-          })),
-      });
+      const runtimeMessages = [...threadMessages, userMessage]
+        .filter((message) => message.role !== "system")
+        .map((message) => ({
+          role: message.role,
+          content: message.text,
+        }));
+
+      if (activeWorkspacePath) {
+        runtimeMessages.unshift({
+          role: "system",
+          content: `Current workspace folder: ${activeWorkspacePath}`,
+        });
+      }
+
+      const result = await agent.invoke({ messages: runtimeMessages });
 
       const messages = (result as { messages?: Array<{ content?: unknown }> })
         .messages;
