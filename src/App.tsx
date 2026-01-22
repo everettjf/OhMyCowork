@@ -31,8 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { ChatOpenAI } from "@langchain/openai";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readDir } from "@tauri-apps/plugin-fs";
-import { join } from "@tauri-apps/api/path";
+import { mkdir, readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { appDataDir, join } from "@tauri-apps/api/path";
 import {
   ChevronDown,
   ChevronRight,
@@ -44,9 +44,11 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { NoopBackend } from "@/lib/agent-backend";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
+const SETTINGS_FILENAME = "settings.json";
 
 type Thread = {
   id: string;
@@ -92,8 +94,11 @@ function App() {
   const [openRouterModel, setOpenRouterModel] = useState(
     OPENROUTER_DEFAULT_MODEL
   );
+  const [draftApiKey, setDraftApiKey] = useState("");
+  const [draftModel, setDraftModel] = useState(OPENROUTER_DEFAULT_MODEL);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [workspaceEntries, setWorkspaceEntries] = useState<
     Record<string, WorkspaceEntry[]>
   >({});
@@ -103,17 +108,53 @@ function App() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedKey = localStorage.getItem("openrouter.apiKey") ?? "";
-    const storedModel =
-      localStorage.getItem("openrouter.model") ?? OPENROUTER_DEFAULT_MODEL;
-    setOpenRouterApiKey(storedKey);
-    setOpenRouterModel(storedModel);
+    const loadSettings = async () => {
+      try {
+        const baseDir = await appDataDir();
+        await mkdir(baseDir, { recursive: true });
+        const settingsPath = await join(baseDir, SETTINGS_FILENAME);
+        const contents = await readTextFile(settingsPath);
+        const parsed = JSON.parse(contents) as {
+          openRouterApiKey?: string;
+          openRouterModel?: string;
+        };
+        setOpenRouterApiKey(parsed.openRouterApiKey ?? "");
+        setOpenRouterModel(parsed.openRouterModel ?? OPENROUTER_DEFAULT_MODEL);
+      } catch {
+        setOpenRouterApiKey("");
+        setOpenRouterModel(OPENROUTER_DEFAULT_MODEL);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+    void loadSettings();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("openrouter.apiKey", openRouterApiKey);
-    localStorage.setItem("openrouter.model", openRouterModel);
-  }, [openRouterApiKey, openRouterModel]);
+    if (!settingsLoaded) return;
+    setDraftApiKey(openRouterApiKey);
+    setDraftModel(openRouterModel);
+  }, [openRouterApiKey, openRouterModel, settingsLoaded]);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    const persistSettings = async () => {
+      try {
+        const baseDir = await appDataDir();
+        await mkdir(baseDir, { recursive: true });
+        const settingsPath = await join(baseDir, SETTINGS_FILENAME);
+        const payload = JSON.stringify(
+          { openRouterApiKey, openRouterModel },
+          null,
+          2
+        );
+        await writeTextFile(settingsPath, payload);
+      } catch {
+        return;
+      }
+    };
+    void persistSettings();
+  }, [openRouterApiKey, openRouterModel, settingsLoaded]);
 
   const filteredThreads = useMemo(() => {
     const query = threadQuery.trim().toLowerCase();
@@ -308,6 +349,7 @@ function App() {
       const { createDeepAgent } = await import("deepagents");
       const agent = createDeepAgent({
         model,
+        backend: () => new NoopBackend(),
         systemPrompt: activeWorkspacePath
           ? `You are a helpful coworker assistant. The current workspace root is ${activeWorkspacePath}.`
           : "You are a helpful coworker assistant.",
@@ -614,22 +656,40 @@ function App() {
               <label className="text-xs font-medium">OpenRouter API Key</label>
               <Input
                 type="password"
-                value={openRouterApiKey}
-                onChange={(event) => setOpenRouterApiKey(event.target.value)}
+                value={draftApiKey}
+                onChange={(event) => setDraftApiKey(event.target.value)}
                 placeholder="sk-or-..."
               />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium">Model</label>
               <Input
-                value={openRouterModel}
-                onChange={(event) => setOpenRouterModel(event.target.value)}
+                value={draftModel}
+                onChange={(event) => setDraftModel(event.target.value)}
                 placeholder="openai/gpt-4o-mini"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setSettingsOpen(false)}>Done</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDraftApiKey(openRouterApiKey);
+                setDraftModel(openRouterModel);
+                setSettingsOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setOpenRouterApiKey(draftApiKey);
+                setOpenRouterModel(draftModel || OPENROUTER_DEFAULT_MODEL);
+                setSettingsOpen(false);
+              }}
+            >
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
