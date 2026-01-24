@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 use tokio::sync::oneshot;
 
@@ -29,6 +29,7 @@ struct SendMessageParams {
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
     tavily_api_key: Option<String>,
+    request_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +56,7 @@ async fn send_message(
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
     tavily_api_key: Option<String>,
+    request_id: Option<String>,
 ) -> Result<String, String> {
     let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
 
@@ -67,6 +69,7 @@ async fn send_message(
             messages,
             workspace_path,
             tavily_api_key,
+            request_id,
         },
     };
 
@@ -105,6 +108,13 @@ fn handle_sidecar_output(app: &tauri::AppHandle, line: &str) {
     // Skip empty lines
     if line.trim().is_empty() {
         return;
+    }
+
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+        if value.get("event").and_then(|v| v.as_str()) == Some("agent_status") {
+            let _ = app.emit("agent:status", value);
+            return;
+        }
     }
 
     // Try to parse as RPC response

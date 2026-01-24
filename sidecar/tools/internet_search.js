@@ -1,13 +1,25 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-export function createInternetSearchTool(tavilyApiKey) {
+export function createInternetSearchTool({ tavilyApiKey, requestId, emitStatus }) {
+  const notify = (stage, detail) => {
+    if (typeof emitStatus === "function") {
+      emitStatus({
+        stage,
+        tool: "internet_search",
+        detail,
+        requestId,
+      });
+    }
+  };
+
   return tool(
     async ({
       query,
       maxResults = 5,
       topic = "general",
     }) => {
+      notify("tool_start", { query, maxResults, topic });
       console.error(JSON.stringify({ event: "tavily_search_query", query, maxResults, topic }));
       const response = await fetch("https://api.tavily.com/search", {
         method: "POST",
@@ -38,6 +50,7 @@ export function createInternetSearchTool(tavilyApiKey) {
             body: payload,
           })
         );
+        notify("tool_error", { status: response.status });
         throw new Error(`Tavily request failed with status ${response.status}`);
       }
 
@@ -46,6 +59,7 @@ export function createInternetSearchTool(tavilyApiKey) {
         results: payload?.results ?? [],
       };
       console.error(JSON.stringify({ event: "tavily_search_result", result }));
+      notify("tool_end", { status: response.status });
       return result;
     },
     {

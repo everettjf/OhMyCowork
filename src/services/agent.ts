@@ -14,6 +14,7 @@ export type AgentConfig = {
 export async function sendMessage(
   config: AgentConfig,
   messages: ChatMessage[],
+  requestId: string,
   workspacePath?: string | null
 ): Promise<string> {
   return invoke<string>("send_message", {
@@ -22,5 +23,6 @@ export async function sendMessage(
     messages,
     workspacePath: workspacePath ?? null,
     tavilyApiKey: config.tavilyApiKey || null,
+    requestId,
   });
 }

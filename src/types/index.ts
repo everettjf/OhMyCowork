@@ -10,6 +10,7 @@ export type Message = {
   role: "user" | "assistant" | "system";
   text: string;
   timestamp: string;
+  status?: "pending";
 };
 
 export type WorkspaceEntry = {

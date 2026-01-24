@@ -32,6 +32,7 @@ import {
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
+import { listen } from "@tauri-apps/api/event";
 import {
   ChevronDown,
   ChevronRight,
@@ -82,9 +83,87 @@ function App() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const pendingByRequestIdRef = useRef<
+    Record<
+      string,
+      {
+        threadId: string;
+        messageId: string;
+        tools: string[];
+      }
+    >
+  >({});
+
+  const updateMessage = useCallback(
+    (
+      threadId: string,
+      messageId: string,
+      updater: (message: Message) => Partial<Message>
+    ) => {
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [threadId]: (prev[threadId] ?? []).map((message) =>
+          message.id === messageId
+            ? { ...message, ...updater(message) }
+            : message
+        ),
+      }));
+    },
+    []
+  );
 
   useEffect(() => {
     messageInputRef.current?.focus();
+  }, [updateMessage]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const startListening = async () => {
+      unlisten = await listen("agent:status", (event) => {
+        const payload = event.payload as {
+          requestId?: string | null;
+          stage?: string | null;
+          tool?: string | null;
+          detail?: Record<string, unknown> | null;
+        };
+        const requestId = payload?.requestId;
+        if (!requestId) return;
+        const entry = pendingByRequestIdRef.current[requestId];
+        if (!entry) return;
+
+        if (payload.stage === "tool_start") {
+          const tool = payload.tool ?? "tool";
+          const query =
+            typeof payload.detail?.query === "string"
+              ? payload.detail.query
+              : null;
+          const label = query ? `${tool} (query: ${query})` : tool;
+          entry.tools.push(label);
+        } else if (payload.stage === "tool_error") {
+          const tool = payload.tool ?? "tool";
+          const status =
+            typeof payload.detail?.status === "number"
+              ? ` (error: ${payload.detail.status})`
+              : " (error)";
+          entry.tools.push(`${tool}${status}`);
+        }
+
+        const statusText =
+          entry.tools.length > 0
+            ? `Tools:\n${entry.tools.map((item) => `- ${item}`).join("\n")}`
+            : "";
+        updateMessage(entry.threadId, entry.messageId, () => ({
+          text: statusText,
+        }));
+      });
+    };
+
+    startListening();
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -243,12 +322,29 @@ function App() {
       text: trimmed,
       timestamp,
     };
+    const pendingMessage: Message = {
+      id: `m-${Date.now() + 1}`,
+      role: "assistant",
+      text: "",
+      timestamp: "Just now",
+      status: "pending",
+    };
     const targetThreadId = activeThreadId;
     const threadMessages = messagesByThread[targetThreadId] ?? [];
+    const requestId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `req-${Date.now()}`;
 
     setMessageDraft("");
     setIsSending(true);
     addMessage(targetThreadId, userMessage);
+    addMessage(targetThreadId, pendingMessage);
+    pendingByRequestIdRef.current[requestId] = {
+      threadId: targetThreadId,
+      messageId: pendingMessage.id,
+      tools: [],
+    };
 
     try {
       const chatMessages = [...threadMessages, userMessage]
@@ -262,15 +358,16 @@ function App() {
           tavilyApiKey: settings.tavilyApiKey,
         },
         chatMessages,
+        requestId,
         activeWorkspacePath
       );
 
-      addMessage(targetThreadId, {
-        id: `m-${Date.now() + 1}`,
+      updateMessage(targetThreadId, pendingMessage.id, () => ({
         role: "assistant",
         text: response,
         timestamp: "Just now",
-      });
+        status: undefined,
+      }));
     } catch (error) {
       const message =
         error instanceof Error
@@ -278,13 +375,14 @@ function App() {
           : typeof error === "string"
             ? error
             : JSON.stringify(error);
-      addMessage(targetThreadId, {
-        id: `m-${Date.now() + 1}`,
+      updateMessage(targetThreadId, pendingMessage.id, () => ({
         role: "system",
         text: `Agent error: ${message}`,
         timestamp: "Just now",
-      });
+        status: undefined,
+      }));
     } finally {
+      delete pendingByRequestIdRef.current[requestId];
       setIsSending(false);
     }
   };
@@ -475,6 +573,14 @@ function App() {
                           <span>{message.timestamp}</span>
                         </div>
                         <div className="mt-2 whitespace-pre-wrap">
+                          {message.status === "pending" ? (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <span
+                                className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
+                                aria-label="Processing"
+                              />
+                            </div>
+                          ) : null}
                           {message.text}
                         </div>
                       </div>
@@ -500,7 +606,7 @@ function App() {
                 disabled={isSending}
               />
               <Button onClick={handleSendMessage} disabled={isSending}>
-                {isSending ? "Sending..." : "Send"}
+                {isSending ? "Processing..." : "Send"}
               </Button>
             </div>
           </div>
@@ -566,9 +672,30 @@ function App() {
                 onChange={(event) => setDraftApiKey(event.target.value)}
                 placeholder="sk-or-..."
               />
+              <div className="text-xs text-muted-foreground">
+                Get your key at{" "}
+                <a
+                  className="underline underline-offset-2"
+                  href="https://openrouter.ai/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  https://openrouter.ai/settings/keys
+                </a>
+              </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-medium">Model</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium">Model</label>
+                <a
+                  className="text-xs text-muted-foreground underline underline-offset-2"
+                  href="https://openrouter.ai/models"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  https://openrouter.ai/models
+                </a>
+              </div>
               <Input
                 value={draftModel}
                 onChange={(event) => setDraftModel(event.target.value)}

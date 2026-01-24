@@ -1,13 +1,23 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { createDeepAgent } from "deepagents";
+import { CompositeBackend, FilesystemBackend, createDeepAgent, createSettings } from "deepagents";
 import * as readline from "readline";
+import fs from "node:fs";
+import path from "node:path";
 import { createInternetSearchTool } from "./tools/internet_search.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const AGENT_NAME = "ohmycowork";
 
 class NoopBackend {
   async lsInfo() { return []; }
   async read() { return "Error: Filesystem access is not available."; }
+  async readRaw() {
+    return {
+      content: ["Error: Filesystem access is not available."],
+      created_at: "",
+      modified_at: "",
+    };
+  }
   async grepRaw() { return "Error: Filesystem access is not available."; }
   async globInfo() { return []; }
   async write() { return { error: "permission_denied", filesUpdate: null }; }
@@ -47,8 +57,44 @@ function formatMessageContent(content) {
   return String(content);
 }
 
+function buildSkillsConfig(workspacePath) {
+  const settings = createSettings({
+    startPath: workspacePath ?? process.cwd(),
+  });
+  const userSkillsDir = settings.ensureUserSkillsDir(AGENT_NAME);
+  let projectSkillsDir = settings.ensureProjectSkillsDir();
+  if (!projectSkillsDir && typeof workspacePath === "string" && workspacePath.trim()) {
+    projectSkillsDir = path.join(workspacePath, ".deepagents", "skills");
+    fs.mkdirSync(projectSkillsDir, { recursive: true });
+  }
+
+  const routes = {};
+  if (userSkillsDir) {
+    routes["/skills/user/"] = new FilesystemBackend({
+      rootDir: userSkillsDir,
+      virtualMode: true,
+    });
+  }
+  if (projectSkillsDir) {
+    routes["/skills/project/"] = new FilesystemBackend({
+      rootDir: projectSkillsDir,
+      virtualMode: true,
+    });
+  }
+
+  const routeKeys = Object.keys(routes);
+  const backend = routeKeys.length === 0
+    ? new NoopBackend()
+    : new CompositeBackend(new NoopBackend(), routes);
+
+  return {
+    backend,
+    skills: routeKeys,
+  };
+}
+
 async function sendMessage(request) {
-  const { apiKey, model, messages, workspacePath, tavilyApiKey } = request;
+  const { apiKey, model, messages, workspacePath, tavilyApiKey, requestId } = request;
 
   const chatModel = createChatModel(apiKey, model);
 
@@ -70,7 +116,24 @@ async function sendMessage(request) {
   // Create tools array
   const tools = [];
   if (hasTavilyKey) {
-    tools.push(createInternetSearchTool(normalizedTavilyKey));
+    const emitStatus = (payload) => {
+      console.log(
+        JSON.stringify({
+          event: "agent_status",
+          requestId: payload?.requestId ?? requestId ?? null,
+          stage: payload?.stage ?? "status",
+          tool: payload?.tool ?? null,
+          detail: payload?.detail ?? null,
+        })
+      );
+    };
+    tools.push(
+      createInternetSearchTool({
+        tavilyApiKey: normalizedTavilyKey,
+        requestId,
+        emitStatus,
+      })
+    );
   }
 
 
@@ -88,15 +151,28 @@ Use this to run an internet search for a given query. You can specify the max nu
     systemPrompt += ` The current workspace root is ${workspacePath}.`;
   }
 
+  const { backend, skills } = buildSkillsConfig(workspacePath);
+
   const agent = createDeepAgent({
     model: chatModel,
-    // backend: () => new NoopBackend(),
+    backend,
     tools,
+    skills: skills.length > 0 ? skills : undefined,
+    name: AGENT_NAME,
     systemPrompt,
   });
 
   const runtimeMessages = [...messages];
 
+  console.log(
+    JSON.stringify({
+      event: "agent_status",
+      requestId: requestId ?? null,
+      stage: "processing",
+      tool: null,
+      detail: null,
+    })
+  );
   const result = await agent.invoke({ messages: runtimeMessages });
   const responseMessages = result.messages;
   const lastMessage = responseMessages?.[responseMessages.length - 1];
