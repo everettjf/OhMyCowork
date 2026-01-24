@@ -1,5 +1,4 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -24,10 +23,10 @@ function createChatModel(apiKey, model) {
     model,
     configuration: {
       baseURL: OPENROUTER_BASE_URL,
-      defaultHeaders: {
-        "HTTP-Referer": "https://ohmyco.work",
-        "X-Title": "Oh My Cowork",
-      },
+      // defaultHeaders: {
+      //   "HTTP-Referer": "https://ohmyco.work",
+      //   "X-Title": "Oh My Cowork",
+      // },
     },
   });
 }
@@ -39,12 +38,41 @@ function createInternetSearchTool(tavilyApiKey) {
       maxResults = 5,
       topic = "general",
     }) => {
-      const tavilySearch = new TavilySearch({
-        maxResults,
-        apiKey: tavilyApiKey,
-        topic,
+      console.error(JSON.stringify({ event: "tavily_search_query", query, maxResults, topic }));
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tavilyApiKey}`,
+        },
+        body: JSON.stringify({
+          query,
+          search_depth: "advanced",
+          max_results: maxResults,
+          topic,
+        }),
       });
-      return await tavilySearch._call({ query });
+      const text = await response.text();
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = { error: text };
+      }
+
+      if (!response.ok) {
+        console.error(
+          JSON.stringify({
+            event: "tavily_search_error",
+            status: response.status,
+            body: payload,
+          })
+        );
+        throw new Error(`Tavily request failed with status ${response.status}`);
+      }
+
+      console.error(JSON.stringify({ event: "tavily_search_result", result: payload }));
+      return payload;
     },
     {
       name: "internet_search",
@@ -80,28 +108,50 @@ async function sendMessage(request) {
 
   const chatModel = createChatModel(apiKey, model);
 
+  const normalizedTavilyKey = typeof tavilyApiKey === "string" ? tavilyApiKey.trim() : "";
+  const hasTavilyKey = normalizedTavilyKey.length > 0;
+  const tavilyKeyPreview = hasTavilyKey
+    ? `${normalizedTavilyKey.slice(0, 4)}...${normalizedTavilyKey.slice(-4)}`
+    : "none";
+  const hadWhitespace = typeof tavilyApiKey === "string" && normalizedTavilyKey !== tavilyApiKey;
+  console.error(
+    JSON.stringify({
+      event: "tavily_key_status",
+      hasTavilyKey,
+      tavilyKeyPreview,
+      hadWhitespace,
+    })
+  );
+
   // Create tools array
   const tools = [];
-  if (tavilyApiKey) {
-    tools.push(createInternetSearchTool(tavilyApiKey));
+  if (hasTavilyKey) {
+    tools.push(createInternetSearchTool(normalizedTavilyKey));
+  }
+
+
+  let systemPrompt = `You are an expert researcher and coworker assistant. Your job is to conduct thorough research and then write a polished report.
+
+You have access to an internet search tool as your primary means of gathering information.
+
+## \`internet_search\`
+
+Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+`;
+
+  // context
+  if (workspacePath) {
+    systemPrompt += ` The current workspace root is ${workspacePath}.`;
   }
 
   const agent = createDeepAgent({
     model: chatModel,
-    backend: () => new NoopBackend(),
+    // backend: () => new NoopBackend(),
     tools,
-    systemPrompt: workspacePath
-      ? `You are a helpful coworker assistant. The current workspace root is ${workspacePath}. You have access to internet search capabilities to find current information.`
-      : "You are a helpful coworker assistant. You have access to internet search capabilities to find current information.",
+    systemPrompt,
   });
 
   const runtimeMessages = [...messages];
-  if (workspacePath) {
-    runtimeMessages.unshift({
-      role: "system",
-      content: `Current workspace folder: ${workspacePath}`,
-    });
-  }
 
   const result = await agent.invoke({ messages: runtimeMessages });
   const responseMessages = result.messages;
