@@ -17,17 +17,28 @@ export const join = (...segments: string[]) =>
     .join("/")
     .replace(/^/, "/");
 
-const posix = {
+export const isAbsolute = (input: string) => input.startsWith("/");
+
+export const sep = "/";
+export const delimiter = ":";
+
+export const posix = {
   basename,
   dirname,
   join,
+  isAbsolute,
+  sep,
+  delimiter,
 };
 
 export default {
   basename,
   dirname,
   join,
+  isAbsolute,
+  sep,
+  delimiter,
   posix,
 };
 
-export { posix };
+export const win32 = posix;

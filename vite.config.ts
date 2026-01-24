@@ -20,6 +20,8 @@ export default defineConfig(async () => ({
       ).pathname,
       "node:os": new URL("./src/shims/os", import.meta.url).pathname,
       os: new URL("./src/shims/os", import.meta.url).pathname,
+      "path-browserify": new URL("./src/shims/path", import.meta.url).pathname,
+      "path/posix": new URL("./src/shims/path", import.meta.url).pathname,
     },
   },
 
