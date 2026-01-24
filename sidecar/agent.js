@@ -4,6 +4,11 @@ import * as readline from "readline";
 import fs from "node:fs";
 import path from "node:path";
 import { createInternetSearchTool } from "./tools/internet_search.js";
+import { createGetTimeTool } from "./tools/get_time.js";
+import { createGetTimezoneTool } from "./tools/get_timezone.js";
+import { createRandomNumberTool } from "./tools/random_number.js";
+import { createGenerateUuidTool } from "./tools/generate_uuid.js";
+import { createCalculateExpressionTool } from "./tools/calculate_expression.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const AGENT_NAME = "ohmycowork";
@@ -113,20 +118,27 @@ async function sendMessage(request) {
     })
   );
 
+  const emitStatus = (payload) => {
+    console.log(
+      JSON.stringify({
+        event: "agent_status",
+        requestId: payload?.requestId ?? requestId ?? null,
+        stage: payload?.stage ?? "status",
+        tool: payload?.tool ?? null,
+        detail: payload?.detail ?? null,
+      })
+    );
+  };
+
   // Create tools array
-  const tools = [];
+  const tools = [
+    createGetTimeTool({ requestId, emitStatus }),
+    createGetTimezoneTool({ requestId, emitStatus }),
+    createRandomNumberTool({ requestId, emitStatus }),
+    createGenerateUuidTool({ requestId, emitStatus }),
+    createCalculateExpressionTool({ requestId, emitStatus }),
+  ];
   if (hasTavilyKey) {
-    const emitStatus = (payload) => {
-      console.log(
-        JSON.stringify({
-          event: "agent_status",
-          requestId: payload?.requestId ?? requestId ?? null,
-          stage: payload?.stage ?? "status",
-          tool: payload?.tool ?? null,
-          detail: payload?.detail ?? null,
-        })
-      );
-    };
     tools.push(
       createInternetSearchTool({
         tavilyApiKey: normalizedTavilyKey,

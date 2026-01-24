@@ -44,6 +44,9 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 import type { Thread, Message, WorkspaceEntry } from "@/types";
 import { sendMessage } from "@/services/agent";
@@ -572,7 +575,7 @@ function App() {
                           </span>
                           <span>{message.timestamp}</span>
                         </div>
-                        <div className="mt-2 whitespace-pre-wrap">
+                        <div className="mt-2">
                           {message.status === "pending" ? (
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <span
@@ -581,7 +584,16 @@ function App() {
                               />
                             </div>
                           ) : null}
-                          {message.text}
+                          {message.role === "assistant" ? (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkMath]}
+                              rehypePlugins={[rehypeKatex]}
+                            >
+                              {message.text}
+                            </ReactMarkdown>
+                          ) : (
+                            <div className="whitespace-pre-wrap">{message.text}</div>
+                          )}
                         </div>
                       </div>
                     ))}
