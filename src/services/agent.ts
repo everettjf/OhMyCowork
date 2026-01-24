@@ -8,6 +8,7 @@ export type ChatMessage = {
 export type AgentConfig = {
   apiKey: string;
   model: string;
+  tavilyApiKey?: string;
 };
 
 export async function sendMessage(
@@ -20,5 +21,6 @@ export async function sendMessage(
     model: config.model,
     messages,
     workspacePath: workspacePath ?? null,
+    tavilyApiKey: config.tavilyApiKey || null,
   });
 }

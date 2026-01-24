@@ -1,5 +1,8 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import * as readline from "readline";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -29,6 +32,32 @@ function createChatModel(apiKey, model) {
   });
 }
 
+function createInternetSearchTool(tavilyApiKey) {
+  return tool(
+    async ({
+      query,
+      maxResults = 5,
+      topic = "general",
+    }) => {
+      const tavilySearch = new TavilySearch({
+        maxResults,
+        apiKey: tavilyApiKey,
+        topic,
+      });
+      return await tavilySearch._call({ query });
+    },
+    {
+      name: "internet_search",
+      description: "Search the internet for current information. Use this when you need to find up-to-date information, news, or facts that may not be in your training data.",
+      schema: z.object({
+        query: z.string().describe("The search query"),
+        maxResults: z.number().optional().default(5).describe("Maximum number of results to return"),
+        topic: z.enum(["general", "news", "finance"]).optional().default("general").describe("The topic category for the search"),
+      }),
+    }
+  );
+}
+
 function formatMessageContent(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -47,15 +76,23 @@ function formatMessageContent(content) {
 }
 
 async function sendMessage(request) {
-  const { apiKey, model, messages, workspacePath } = request;
+  const { apiKey, model, messages, workspacePath, tavilyApiKey } = request;
 
   const chatModel = createChatModel(apiKey, model);
+
+  // Create tools array
+  const tools = [];
+  if (tavilyApiKey) {
+    tools.push(createInternetSearchTool(tavilyApiKey));
+  }
+
   const agent = createDeepAgent({
     model: chatModel,
     backend: () => new NoopBackend(),
+    tools,
     systemPrompt: workspacePath
-      ? `You are a helpful coworker assistant. The current workspace root is ${workspacePath}.`
-      : "You are a helpful coworker assistant.",
+      ? `You are a helpful coworker assistant. The current workspace root is ${workspacePath}. You have access to internet search capabilities to find current information.`
+      : "You are a helpful coworker assistant. You have access to internet search capabilities to find current information.",
   });
 
   const runtimeMessages = [...messages];
