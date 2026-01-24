@@ -29,10 +29,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, confirm } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ChevronDown,
   ChevronRight,
@@ -93,6 +94,7 @@ function App() {
         threadId: string;
         messageId: string;
         tools: string[];
+        permissionNotified: boolean;
       }
     >
   >({});
@@ -150,6 +152,10 @@ function App() {
               : " (error)";
           entry.tools.push(`${tool}${status}`);
         }
+        if (payload.stage === "permission_error" && !entry.permissionNotified) {
+          entry.permissionNotified = true;
+          promptWorkspacePermission(entry.threadId);
+        }
 
         const statusText =
           entry.tools.length > 0
@@ -192,6 +198,16 @@ function App() {
   const activeMessages = messagesByThread[activeThreadId] ?? [];
   const activeWorkspacePath = activeThread?.workspacePath ?? null;
 
+  const promptWorkspacePermission = async (threadId: string) => {
+    const confirmed = await confirm(
+      "The app needs permission to access this folder. Re-select the workspace to grant access.",
+      { title: "Permission required", kind: "warning" }
+    );
+    if (confirmed) {
+      await handleSelectWorkspace(threadId);
+    }
+  };
+
   const loadDirectory = useCallback(async (path: string) => {
     try {
       setWorkspaceError(null);
@@ -212,11 +228,16 @@ function App() {
       });
       setWorkspaceEntries((prev) => ({ ...prev, [path]: mappedEntries }));
     } catch (error) {
+      const code = error instanceof Error ? (error as { code?: string }).code : undefined;
+      if (code === "EACCES" || code === "EPERM") {
+        // Re-open the folder picker to re-grant OS access.
+        await promptWorkspacePermission(activeThreadId);
+      }
       setWorkspaceError(
         error instanceof Error ? error.message : "Failed to read folder"
       );
     }
-  }, []);
+  }, [activeThreadId]);
 
   useEffect(() => {
     if (!activeWorkspacePath) return;
@@ -239,7 +260,7 @@ function App() {
   };
 
   const handleSelectWorkspace = async (threadId: string) => {
-    const selected = await open({
+    const selected = await openDialog({
       directory: true,
       multiple: false,
       title: "Select workspace folder",
@@ -255,7 +276,7 @@ function App() {
   };
 
   const createThread = async () => {
-    const selected = await open({
+    const selected = await openDialog({
       directory: true,
       multiple: false,
       title: "Select workspace folder",
@@ -347,6 +368,7 @@ function App() {
       threadId: targetThreadId,
       messageId: pendingMessage.id,
       tools: [],
+      permissionNotified: false,
     };
 
     try {
@@ -588,6 +610,26 @@ function App() {
                             <ReactMarkdown
                               remarkPlugins={[remarkMath]}
                               rehypePlugins={[rehypeKatex]}
+                              components={{
+                                a: ({ href, children }) => {
+                                  const safeHref = typeof href === "string" ? href : "";
+                                  return (
+                                    <a
+                                      href={safeHref}
+                                      className="underline underline-offset-2"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        if (!safeHref) return;
+                                        Promise.resolve(openUrl(safeHref)).catch(() => {
+                                          window.open(safeHref, "_blank", "noopener,noreferrer");
+                                        });
+                                      }}
+                                    >
+                                      {children}
+                                    </a>
+                                  );
+                                },
+                              }}
                             >
                               {message.text}
                             </ReactMarkdown>

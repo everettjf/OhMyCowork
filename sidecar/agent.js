@@ -3,12 +3,16 @@ import { CompositeBackend, FilesystemBackend, createDeepAgent, createSettings } 
 import * as readline from "readline";
 import fs from "node:fs";
 import path from "node:path";
-import { createInternetSearchTool } from "./tools/internet_search.js";
-import { createGetTimeTool } from "./tools/get_time.js";
-import { createGetTimezoneTool } from "./tools/get_timezone.js";
-import { createRandomNumberTool } from "./tools/random_number.js";
-import { createGenerateUuidTool } from "./tools/generate_uuid.js";
-import { createCalculateExpressionTool } from "./tools/calculate_expression.js";
+import {
+  createCalculateExpressionTool,
+  createGenerateUuidTool,
+  createGetTimeTool,
+  createGetTimezoneTool,
+  createInternetSearchTool,
+  createRandomNumberTool,
+  createRunNodeTool,
+} from "./tools/index.js";
+import { createFolderOrganizerSubagent } from "./subagents/folder_organizer.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const AGENT_NAME = "ohmycowork";
@@ -29,6 +33,18 @@ class NoopBackend {
   async edit() { return { error: "permission_denied", filesUpdate: null, occurrences: 0 }; }
   async uploadFiles(files) { return files.map(([path]) => ({ path, error: "permission_denied" })); }
   async downloadFiles(paths) { return paths.map((path) => ({ path, content: null, error: "permission_denied" })); }
+}
+
+function emitAgentStatus(payload) {
+  console.log(
+    JSON.stringify({
+      event: "agent_status",
+      requestId: payload?.requestId ?? null,
+      stage: payload?.stage ?? "status",
+      tool: payload?.tool ?? null,
+      detail: payload?.detail ?? null,
+    })
+  );
 }
 
 function createChatModel(apiKey, model) {
@@ -63,6 +79,7 @@ function formatMessageContent(content) {
 }
 
 function buildSkillsConfig(workspacePath) {
+  // Skills use DeepAgents' standard user/project paths with a workspace fallback.
   const settings = createSettings({
     startPath: workspacePath ?? process.cwd(),
   });
@@ -88,9 +105,17 @@ function buildSkillsConfig(workspacePath) {
   }
 
   const routeKeys = Object.keys(routes);
-  const backend = routeKeys.length === 0
-    ? new NoopBackend()
-    : new CompositeBackend(new NoopBackend(), routes);
+  let defaultBackend;
+  try {
+    // Workspace-only filesystem backend for safe file access.
+    defaultBackend = new FilesystemBackend({
+      rootDir: workspacePath ?? process.cwd(),
+      virtualMode: true,
+    });
+  } catch {
+    defaultBackend = new NoopBackend();
+  }
+  const backend = new CompositeBackend(defaultBackend, routes);
 
   return {
     backend,
@@ -100,6 +125,7 @@ function buildSkillsConfig(workspacePath) {
 
 async function sendMessage(request) {
   const { apiKey, model, messages, workspacePath, tavilyApiKey, requestId } = request;
+  const workspaceRoot = workspacePath ?? process.cwd();
 
   const chatModel = createChatModel(apiKey, model);
 
@@ -118,17 +144,7 @@ async function sendMessage(request) {
     })
   );
 
-  const emitStatus = (payload) => {
-    console.log(
-      JSON.stringify({
-        event: "agent_status",
-        requestId: payload?.requestId ?? requestId ?? null,
-        stage: payload?.stage ?? "status",
-        tool: payload?.tool ?? null,
-        detail: payload?.detail ?? null,
-      })
-    );
-  };
+  const emitStatus = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
 
   // Create tools array
   const tools = [
@@ -137,6 +153,7 @@ async function sendMessage(request) {
     createRandomNumberTool({ requestId, emitStatus }),
     createGenerateUuidTool({ requestId, emitStatus }),
     createCalculateExpressionTool({ requestId, emitStatus }),
+    createRunNodeTool({ requestId, emitStatus }),
   ];
   if (hasTavilyKey) {
     tools.push(
@@ -156,6 +173,10 @@ You have access to an internet search tool as your primary means of gathering in
 ## \`internet_search\`
 
 Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+
+## Subagents
+
+- folder-organizer: organize a folder into clean, category-based subfolders.
 `;
 
   // context
@@ -163,13 +184,22 @@ Use this to run an internet search for a given query. You can specify the max nu
     systemPrompt += ` The current workspace root is ${workspacePath}.`;
   }
 
-  const { backend, skills } = buildSkillsConfig(workspacePath);
+  const { backend, skills } = buildSkillsConfig(workspaceRoot);
+  const subagents = [
+    createFolderOrganizerSubagent({
+      model: chatModel,
+      workspaceRoot,
+      requestId,
+      emitStatus,
+    }),
+  ];
 
   const agent = createDeepAgent({
     model: chatModel,
     backend,
     tools,
     skills: skills.length > 0 ? skills : undefined,
+    subagents,
     name: AGENT_NAME,
     systemPrompt,
   });
