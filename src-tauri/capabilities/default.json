@@ -9,6 +9,7 @@
     "dialog:default",
     "fs:default",
     "store:default",
+    "shell:default",
     {
       "identifier": "fs:scope",
       "allow": [

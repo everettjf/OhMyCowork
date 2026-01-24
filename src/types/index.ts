@@ -18,14 +18,3 @@ export type WorkspaceEntry = {
   isDirectory: boolean;
   isFile: boolean;
 };
-
-export type AgentConfig = {
-  apiKey: string;
-  model: string;
-  baseUrl: string;
-};
-
-export type ChatMessage = {
-  role: string;
-  content: string;
-};

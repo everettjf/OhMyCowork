@@ -45,10 +45,8 @@ import {
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 
 import type { Thread, Message, WorkspaceEntry } from "@/types";
-import { sendMessage, preloadAgent } from "@/services/agent";
+import { sendMessage } from "@/services/agent";
 import { useSettings, DEFAULT_SETTINGS } from "@/hooks/useSettings";
-
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 function App() {
   const [threads, setThreads] = useState<Thread[]>([
@@ -86,7 +84,6 @@ function App() {
 
   useEffect(() => {
     messageInputRef.current?.focus();
-    preloadAgent(); // 预加载 agent 模块
   }, []);
 
   useEffect(() => {
@@ -260,7 +257,6 @@ function App() {
         {
           apiKey: settings.apiKey,
           model: settings.model,
-          baseUrl: OPENROUTER_BASE_URL,
         },
         chatMessages,
         activeWorkspacePath
@@ -274,7 +270,11 @@ function App() {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unknown error occurred";
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : JSON.stringify(error);
       addMessage(targetThreadId, {
         id: `m-${Date.now() + 1}`,
         role: "system",

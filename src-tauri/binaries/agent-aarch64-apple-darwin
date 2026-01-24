@@ -1,0 +1,10 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# In dev mode, binaries are in src-tauri/binaries, sidecar is in project root/sidecar
+SIDECAR_DIR="$SCRIPT_DIR/../../sidecar"
+if [ ! -d "$SIDECAR_DIR" ]; then
+  # Try relative to target/debug
+  SIDECAR_DIR="$SCRIPT_DIR/../../../sidecar"
+fi
+cd "$SIDECAR_DIR"
+exec node agent.js

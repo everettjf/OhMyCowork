@@ -7,25 +7,9 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
-  define: {
-    "process.versions.node": JSON.stringify("20.0.0"),
-    "process.env.NODE_ENV": JSON.stringify("production"),
-  },
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,
-      "node:async_hooks": new URL("./src/shims/async_hooks", import.meta.url)
-        .pathname,
-      "node:path": new URL("./src/shims/path", import.meta.url).pathname,
-      path: new URL("./src/shims/path", import.meta.url).pathname,
-      "node:child_process": new URL(
-        "./src/shims/child_process",
-        import.meta.url
-      ).pathname,
-      "node:os": new URL("./src/shims/os", import.meta.url).pathname,
-      os: new URL("./src/shims/os", import.meta.url).pathname,
-      "path-browserify": new URL("./src/shims/path", import.meta.url).pathname,
-      "path/posix": new URL("./src/shims/path", import.meta.url).pathname,
     },
   },
 

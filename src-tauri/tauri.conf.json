@@ -32,6 +32,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "externalBin": ["binaries/agent"],
     "macOS": {
       "entitlements": "entitlements.plist",
       "hardenedRuntime": false
