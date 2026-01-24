@@ -29,10 +29,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ChatOpenAI } from "@langchain/openai";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
-import { Store } from "@tauri-apps/plugin-store";
 import { join } from "@tauri-apps/api/path";
 import {
   ChevronDown,
@@ -44,33 +42,13 @@ import {
   Search,
   Settings,
 } from "lucide-react";
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { NoopBackend } from "@/lib/agent-backend";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+
+import type { Thread, Message, WorkspaceEntry } from "@/types";
+import { sendMessage, preloadAgent } from "@/services/agent";
+import { useSettings, DEFAULT_SETTINGS } from "@/hooks/useSettings";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const OPENROUTER_DEFAULT_MODEL = "openai/gpt-4o-mini";
-const SETTINGS_STORE = "settings.json";
-
-type Thread = {
-  id: string;
-  title: string;
-  unread: number;
-  workspacePath?: string | null;
-};
-
-type Message = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  timestamp: string;
-};
-
-type WorkspaceEntry = {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  isFile: boolean;
-};
 
 function App() {
   const [threads, setThreads] = useState<Thread[]>([
@@ -91,70 +69,31 @@ function App() {
       },
     ],
   }));
-  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
-  const [openRouterModel, setOpenRouterModel] = useState(
-    OPENROUTER_DEFAULT_MODEL
-  );
+
+  const { settings, loaded: settingsLoaded, error: settingsError, saveSettings, clearError } = useSettings();
   const [draftApiKey, setDraftApiKey] = useState("");
-  const [draftModel, setDraftModel] = useState(OPENROUTER_DEFAULT_MODEL);
+  const [draftModel, setDraftModel] = useState(DEFAULT_SETTINGS.model);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
+
   const [workspaceEntries, setWorkspaceEntries] = useState<
     Record<string, WorkspaceEntry[]>
   >({});
-  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
+  const messageInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const store = await Store.load(SETTINGS_STORE);
-        const storedKey = (await store.get<string>("openRouterApiKey")) ?? "";
-        const storedModel =
-          (await store.get<string>("openRouterModel")) ??
-          OPENROUTER_DEFAULT_MODEL;
-        setOpenRouterApiKey(storedKey);
-        setOpenRouterModel(storedModel);
-        setSettingsError(null);
-      } catch (error) {
-        setOpenRouterApiKey("");
-        setOpenRouterModel(OPENROUTER_DEFAULT_MODEL);
-        setSettingsError(
-          error instanceof Error ? error.message : "Failed to load settings."
-        );
-      } finally {
-        setSettingsLoaded(true);
-      }
-    };
-    void loadSettings();
+    messageInputRef.current?.focus();
+    preloadAgent(); // 预加载 agent 模块
   }, []);
 
   useEffect(() => {
     if (!settingsLoaded) return;
-    setDraftApiKey(openRouterApiKey);
-    setDraftModel(openRouterModel);
-  }, [openRouterApiKey, openRouterModel, settingsLoaded]);
-
-  const saveSettings = async (apiKey: string, model: string) => {
-    try {
-      const store = await Store.load(SETTINGS_STORE);
-      await store.set("openRouterApiKey", apiKey);
-      await store.set("openRouterModel", model || OPENROUTER_DEFAULT_MODEL);
-      await store.save();
-      setOpenRouterApiKey(apiKey);
-      setOpenRouterModel(model || OPENROUTER_DEFAULT_MODEL);
-      setSettingsError(null);
-      setSettingsOpen(false);
-    } catch (error) {
-      setSettingsError(
-        error instanceof Error ? error.message : "Failed to save settings."
-      );
-    }
-  };
+    setDraftApiKey(settings.apiKey);
+    setDraftModel(settings.model);
+  }, [settings, settingsLoaded]);
 
   const filteredThreads = useMemo(() => {
     const query = threadQuery.trim().toLowerCase();
@@ -227,9 +166,7 @@ function App() {
     if (!selected || Array.isArray(selected)) return;
     setThreads((prev) =>
       prev.map((thread) =>
-        thread.id === threadId
-          ? { ...thread, workspacePath: selected }
-          : thread
+        thread.id === threadId ? { ...thread, workspacePath: selected } : thread
       )
     );
     setExpandedPaths((prev) => ({ ...prev, [selected]: true }));
@@ -274,40 +211,25 @@ function App() {
     }
   };
 
-  const formatMessageContent = (content: unknown) => {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .map((item) => {
-          if (typeof item === "string") return item;
-          if (typeof item === "object" && item && "text" in item) {
-            return String(item.text ?? "");
-          }
-          return "";
-        })
-        .join("");
-    }
-    if (content == null) return "";
-    return String(content);
+  const addMessage = (threadId: string, message: Message) => {
+    setMessagesByThread((prev) => ({
+      ...prev,
+      [threadId]: [...(prev[threadId] ?? []), message],
+    }));
   };
 
   const handleSendMessage = async () => {
     if (isSending) return;
     const trimmed = messageDraft.trim();
     if (!trimmed) return;
-    if (!openRouterApiKey || !openRouterModel) {
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [activeThreadId]: [
-          ...(prev[activeThreadId] ?? []),
-          {
-            id: `m-${Date.now()}`,
-            role: "system",
-            text: "OpenRouter key or model missing. Open settings to configure.",
-            timestamp: "Just now",
-          },
-        ],
-      }));
+
+    if (!settings.apiKey || !settings.model) {
+      addMessage(activeThreadId, {
+        id: `m-${Date.now()}`,
+        role: "system",
+        text: "OpenRouter key or model missing. Open settings to configure.",
+        timestamp: "Just now",
+      });
       return;
     }
 
@@ -327,85 +249,55 @@ function App() {
 
     setMessageDraft("");
     setIsSending(true);
-    setMessagesByThread((prev) => ({
-      ...prev,
-      [targetThreadId]: [...(prev[targetThreadId] ?? []), userMessage],
-    }));
+    addMessage(targetThreadId, userMessage);
 
     try {
-      const model = new ChatOpenAI({
-        apiKey: openRouterApiKey,
-        model: openRouterModel,
-        configuration: {
-          baseURL: OPENROUTER_BASE_URL,
-          dangerouslyAllowBrowser: true,
-          defaultHeaders: {
-            "HTTP-Referer": "https://ohmycowork.local",
-            "X-Title": "Oh My Cowork",
-          },
+      const chatMessages = [...threadMessages, userMessage]
+        .filter((msg) => msg.role !== "system")
+        .map((msg) => ({ role: msg.role, content: msg.text }));
+
+      const response = await sendMessage(
+        {
+          apiKey: settings.apiKey,
+          model: settings.model,
+          baseUrl: OPENROUTER_BASE_URL,
         },
+        chatMessages,
+        activeWorkspacePath
+      );
+
+      addMessage(targetThreadId, {
+        id: `m-${Date.now() + 1}`,
+        role: "assistant",
+        text: response,
+        timestamp: "Just now",
       });
-
-      const { createDeepAgent } = await import("deepagents");
-      const agent = createDeepAgent({
-        model,
-        backend: () => new NoopBackend(),
-        systemPrompt: activeWorkspacePath
-          ? `You are a helpful coworker assistant. The current workspace root is ${activeWorkspacePath}.`
-          : "You are a helpful coworker assistant.",
-      });
-
-      const runtimeMessages = [...threadMessages, userMessage]
-        .filter((message) => message.role !== "system")
-        .map((message) => ({
-          role: message.role,
-          content: message.text,
-        }));
-
-      if (activeWorkspacePath) {
-        runtimeMessages.unshift({
-          role: "system",
-          content: `Current workspace folder: ${activeWorkspacePath}`,
-        });
-      }
-
-      const result = await agent.invoke({ messages: runtimeMessages });
-
-      const messages = (result as { messages?: Array<{ content?: unknown }> })
-        .messages;
-      const lastMessage = messages?.[messages.length - 1];
-      const assistantText = formatMessageContent(lastMessage?.content);
-
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [targetThreadId]: [
-          ...(prev[targetThreadId] ?? []),
-          {
-            id: `m-${Date.now() + 1}`,
-            role: "assistant",
-            text: assistantText || "No response from model.",
-            timestamp: "Just now",
-          },
-        ],
-      }));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown error occurred";
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [targetThreadId]: [
-          ...(prev[targetThreadId] ?? []),
-          {
-            id: `m-${Date.now() + 1}`,
-            role: "system",
-            text: `Agent error: ${message}`,
-            timestamp: "Just now",
-          },
-        ],
-      }));
+      addMessage(targetThreadId, {
+        id: `m-${Date.now() + 1}`,
+        role: "system",
+        text: `Agent error: ${message}`,
+        timestamp: "Just now",
+      });
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSaveSettings = async () => {
+    const success = await saveSettings({ apiKey: draftApiKey, model: draftModel });
+    if (success) {
+      setSettingsOpen(false);
+    }
+  };
+
+  const handleCancelSettings = () => {
+    setDraftApiKey(settings.apiKey);
+    setDraftModel(settings.model);
+    clearError();
+    setSettingsOpen(false);
   };
 
   const renderWorkspaceEntries = (path: string, depth = 0) => {
@@ -420,9 +312,7 @@ function App() {
 
     if (entries.length === 0) {
       return (
-        <div className="py-2 text-xs text-muted-foreground">
-          Empty folder
-        </div>
+        <div className="py-2 text-xs text-muted-foreground">Empty folder</div>
       );
     }
 
@@ -541,7 +431,7 @@ function App() {
               </div>
             </div>
             <div className="text-right text-xs text-muted-foreground">
-              Model: {openRouterModel || "Not configured"}
+              Model: {settings.model || "Not configured"}
             </div>
           </header>
 
@@ -590,6 +480,7 @@ function App() {
 
             <div className="flex items-center gap-2">
               <Input
+                ref={messageInputRef}
                 placeholder="Type a message..."
                 value={messageDraft}
                 onChange={(event) => setMessageDraft(event.target.value)}
@@ -681,24 +572,10 @@ function App() {
             ) : null}
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDraftApiKey(openRouterApiKey);
-                setDraftModel(openRouterModel);
-                setSettingsError(null);
-                setSettingsOpen(false);
-              }}
-            >
+            <Button variant="outline" onClick={handleCancelSettings}>
               Cancel
             </Button>
-            <Button
-              onClick={() => {
-                void saveSettings(draftApiKey, draftModel);
-              }}
-            >
-              Save
-            </Button>
+            <Button onClick={handleSaveSettings}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

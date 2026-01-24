@@ -7,6 +7,10 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+  define: {
+    "process.versions.node": JSON.stringify("20.0.0"),
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,
