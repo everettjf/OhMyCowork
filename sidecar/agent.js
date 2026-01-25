@@ -181,7 +181,17 @@ Use this to run an internet search for a given query. You can specify the max nu
 
   // context
   if (workspacePath) {
-    systemPrompt += ` The current workspace root is ${workspacePath}.`;
+    systemPrompt += `
+
+## Workspace
+
+The user's workspace is mounted at virtual path "/". When using filesystem tools (ls, read_file, write_file, etc.), always use paths relative to "/" - NOT absolute system paths.
+
+- To list the workspace root: use path "/"
+- To read a file: use path "/filename.txt", NOT "/Users/.../filename.txt"
+- The actual system path "${workspacePath}" is mapped to virtual path "/"
+
+IMPORTANT: Never use absolute system paths like "/Users/..." with filesystem tools. Always use virtual paths starting with "/".`;
   }
 
   const { backend, skills } = buildSkillsConfig(workspaceRoot);
@@ -217,6 +227,21 @@ Use this to run an internet search for a given query. You can specify the max nu
   );
   const result = await agent.invoke({ messages: runtimeMessages });
   const responseMessages = result.messages;
+
+  // Debug: 打印所有消息类型、tool calls 和 tool 返回内容
+  console.error(JSON.stringify({
+    event: "debug_messages",
+    messages: responseMessages?.map((m, i) => ({
+      index: i,
+      type: m.constructor?.name || typeof m,
+      role: m._getType?.() || m.role,
+      hasToolCalls: !!(m.tool_calls?.length),
+      toolCalls: m.tool_calls?.map(tc => ({ name: tc.name, args: tc.args })),
+      // 如果是 ToolMessage，显示内容
+      toolContent: m._getType?.() === "tool" ? m.content?.slice?.(0, 500) : undefined,
+    }))
+  }));
+
   const lastMessage = responseMessages?.[responseMessages.length - 1];
 
   return formatMessageContent(lastMessage?.content) || "No response from model.";
