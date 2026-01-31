@@ -9,6 +9,7 @@ import {
   createGetTimeTool,
   createGetTimezoneTool,
   createInternetSearchTool,
+  createAgentBrowserTool,
   createRandomNumberTool,
   createRunNodeTool,
 } from "./tools/index.js";
@@ -154,6 +155,7 @@ async function sendMessage(request) {
     createGenerateUuidTool({ requestId, emitStatus }),
     createCalculateExpressionTool({ requestId, emitStatus }),
     createRunNodeTool({ requestId, emitStatus }),
+    createAgentBrowserTool({ requestId, emitStatus }),
   ];
   if (hasTavilyKey) {
     tools.push(
@@ -173,6 +175,11 @@ You have access to an internet search tool as your primary means of gathering in
 ## \`internet_search\`
 
 Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+
+## \`agent_browser\`
+
+Use this to control a headless browser via the agent-browser CLI. Call it with CLI args (e.g. ["open", "https://example.com"]).
+Use a consistent session name per task to keep browser state, and prefer short, repeatable commands.
 
 ## Subagents
 

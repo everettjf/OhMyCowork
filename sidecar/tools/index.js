@@ -6,3 +6,4 @@ export { createGenerateUuidTool } from "./generate_uuid.js";
 export { createCalculateExpressionTool } from "./calculate_expression.js";
 export { createRunNodeTool } from "./run_node.js";
 export { createOrganizeFolderTool } from "./organize_folder.js";
+export { createAgentBrowserTool } from "./agent_browser.js";
