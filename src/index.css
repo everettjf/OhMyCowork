@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -116,6 +118,52 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: "Manrope", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .markdown {
+    @apply text-sm leading-relaxed text-foreground/90;
+  }
+  .markdown h1,
+  .markdown h2,
+  .markdown h3,
+  .markdown h4 {
+    @apply mt-4 text-base font-semibold text-foreground;
+  }
+  .markdown h1:first-child,
+  .markdown h2:first-child,
+  .markdown h3:first-child,
+  .markdown h4:first-child {
+    @apply mt-0;
+  }
+  .markdown p {
+    @apply my-2;
+  }
+  .markdown ul,
+  .markdown ol {
+    @apply my-2 ml-4 space-y-1;
+  }
+  .markdown li {
+    @apply list-disc;
+  }
+  .markdown ol li {
+    @apply list-decimal;
+  }
+  .markdown hr {
+    @apply my-3 border-border/60;
+  }
+  .markdown pre,
+  .markdown code {
+    font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  .markdown table th,
+  .markdown table td {
+    @apply border border-border/60 px-2 py-1;
+  }
+  .markdown table th {
+    @apply bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground;
   }
 }

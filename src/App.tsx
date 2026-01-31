@@ -487,7 +487,7 @@ function App() {
   };
 
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider defaultOpen className="h-svh overflow-hidden">
       <Sidebar variant="sidebar">
         <SidebarHeader>
           <div className="flex items-center justify-between gap-2 px-1">
@@ -513,28 +513,30 @@ function App() {
           </div>
         </SidebarHeader>
         <SidebarSeparator />
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Recent</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filteredThreads.map((thread) => (
-                  <SidebarMenuItem key={thread.id}>
-                    <SidebarMenuButton
-                      isActive={thread.id === activeThreadId}
-                      onClick={() => handleSelectThread(thread.id)}
-                    >
-                      <MessageSquare className="h-4 w-4" />
-                      <span>{thread.title}</span>
-                    </SidebarMenuButton>
-                    {thread.unread > 0 ? (
-                      <SidebarMenuBadge>{thread.unread}</SidebarMenuBadge>
-                    ) : null}
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+        <SidebarContent className="overflow-hidden">
+          <ScrollArea className="flex-1 px-1">
+            <SidebarGroup className="min-h-0 flex-1">
+              <SidebarGroupLabel>Recent</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {filteredThreads.map((thread) => (
+                    <SidebarMenuItem key={thread.id}>
+                      <SidebarMenuButton
+                        isActive={thread.id === activeThreadId}
+                        onClick={() => handleSelectThread(thread.id)}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>{thread.title}</span>
+                      </SidebarMenuButton>
+                      {thread.unread > 0 ? (
+                        <SidebarMenuBadge>{thread.unread}</SidebarMenuBadge>
+                      ) : null}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </ScrollArea>
         </SidebarContent>
         <SidebarFooter>
           <Button
@@ -549,9 +551,9 @@ function App() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="flex">
-        <div className="flex w-full flex-1 flex-col">
-          <header className="flex items-center justify-between border-b px-4 py-3">
+      <SidebarInset className="flex min-h-0 overflow-hidden">
+        <div className="flex w-full min-h-0 flex-1 flex-col">
+          <header className="flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
               <div>
@@ -566,8 +568,8 @@ function App() {
             </div>
           </header>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
-            <Card className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 bg-gradient-to-b from-background via-background to-muted/30 p-4">
+            <Card className="flex min-h-0 flex-1 flex-col border-border/70 bg-card/90 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">
                   Conversation
@@ -575,16 +577,16 @@ function App() {
               </CardHeader>
               <CardContent className="flex min-h-0 flex-1 flex-col">
                 <ScrollArea className="flex-1 pr-4">
-                  <div className="space-y-4">
+                  <div className="space-y-4 pb-2">
                     {activeMessages.map((message) => (
                       <div
                         key={message.id}
-                        className={`rounded-lg border p-3 text-sm ${
+                        className={`rounded-lg border p-3 text-sm shadow-sm ${
                           message.role === "user"
-                            ? "bg-muted/40"
+                            ? "border-muted/70 bg-muted/50"
                             : message.role === "system"
                               ? "border-destructive/40 bg-destructive/10 text-destructive"
-                              : "bg-background"
+                              : "border-border/60 bg-background"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
@@ -607,32 +609,67 @@ function App() {
                             </div>
                           ) : null}
                           {message.role === "assistant" ? (
-                            <ReactMarkdown
-                              remarkPlugins={[remarkMath]}
-                              rehypePlugins={[rehypeKatex]}
-                              components={{
-                                a: ({ href, children }) => {
-                                  const safeHref = typeof href === "string" ? href : "";
-                                  return (
-                                    <a
-                                      href={safeHref}
-                                      className="underline underline-offset-2"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        if (!safeHref) return;
-                                        Promise.resolve(openUrl(safeHref)).catch(() => {
-                                          window.open(safeHref, "_blank", "noopener,noreferrer");
-                                        });
-                                      }}
-                                    >
+                            <div className="markdown">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkMath]}
+                                rehypePlugins={[rehypeKatex]}
+                                components={{
+                                  a: ({ href, children }) => {
+                                    const safeHref = typeof href === "string" ? href : "";
+                                    return (
+                                      <a
+                                        href={safeHref}
+                                        className="underline underline-offset-2 decoration-muted-foreground/60"
+                                        onClick={(event) => {
+                                          event.preventDefault();
+                                          if (!safeHref) return;
+                                          Promise.resolve(openUrl(safeHref)).catch(() => {
+                                            window.open(safeHref, "_blank", "noopener,noreferrer");
+                                          });
+                                        }}
+                                      >
+                                        {children}
+                                      </a>
+                                    );
+                                  },
+                                  code: ({ inline, className, children, ...props }) => {
+                                    if (inline) {
+                                      return (
+                                        <code
+                                          className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[12px]"
+                                          {...props}
+                                        >
+                                          {children}
+                                        </code>
+                                      );
+                                    }
+                                    return (
+                                      <ScrollArea className="max-h-64 rounded-md border border-border/70 bg-muted/40">
+                                        <pre className="p-3 text-xs leading-relaxed">
+                                          <code className={`font-mono ${className ?? ""}`} {...props}>
+                                            {children}
+                                          </code>
+                                        </pre>
+                                      </ScrollArea>
+                                    );
+                                  },
+                                  blockquote: ({ children }) => (
+                                    <blockquote className="border-l-2 border-primary/40 pl-3 text-muted-foreground">
                                       {children}
-                                    </a>
-                                  );
-                                },
-                              }}
-                            >
-                              {message.text}
-                            </ReactMarkdown>
+                                    </blockquote>
+                                  ),
+                                  table: ({ children }) => (
+                                    <div className="w-full overflow-auto">
+                                      <table className="w-full border-collapse text-left text-xs">
+                                        {children}
+                                      </table>
+                                    </div>
+                                  ),
+                                }}
+                              >
+                                {message.text}
+                              </ReactMarkdown>
+                            </div>
                           ) : (
                             <div className="whitespace-pre-wrap">{message.text}</div>
                           )}
@@ -667,7 +704,12 @@ function App() {
         </div>
       </SidebarInset>
 
-      <Sidebar side="right" collapsible="none" variant="sidebar">
+      <Sidebar
+        side="right"
+        collapsible="none"
+        variant="sidebar"
+        className="sticky top-0 h-svh border-l border-sidebar-border bg-sidebar/95"
+      >
         <SidebarHeader>
           <div className="flex items-start justify-between gap-2 px-1">
             <div>
@@ -689,11 +731,11 @@ function App() {
           ) : null}
         </SidebarHeader>
         <SidebarSeparator />
-        <SidebarContent>
-          <SidebarGroup>
+        <SidebarContent className="overflow-hidden">
+          <SidebarGroup className="min-h-0 flex-1">
             <SidebarGroupLabel>Files</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <ScrollArea className="max-h-[70vh] pr-2">
+            <SidebarGroupContent className="min-h-0">
+              <ScrollArea className="h-full pr-2">
                 {activeWorkspacePath ? (
                   <div className="space-y-1">
                     {renderWorkspaceEntries(activeWorkspacePath)}
