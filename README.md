@@ -121,6 +121,13 @@ If you find issues, please open an issue or PR.
 - Project: `.deepagents/skills/`
 - User: `~/.deepagents/skills/`
 
+### Project Skills Included
+
+| Skill | Location | Notes |
+|---|---|---|
+| `example-skill` | `.deepagents/skills/example-skill/SKILL.md` | Local example template |
+| `skill-creator` | `.deepagents/skills/skill-creator/SKILL.md` | Adapted from OpenClaw, for creating/updating skills |
+
 ### Subagents
 
 - `folder-organizer`: Intelligent folder organization
