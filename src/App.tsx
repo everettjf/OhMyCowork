@@ -586,16 +586,6 @@ function App() {
             <ExternalLink className="mr-2 h-4 w-4" />
             Website
           </Button>
-          <Button
-            variant="ghost"
-            className="w-full justify-start"
-            onClick={() => {
-              void openUrl("https://xnu.app");
-            }}
-          >
-            <ExternalLink className="mr-2 h-4 w-4" />
-            More Apps
-          </Button>
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
