@@ -247,10 +247,12 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
     async ({
       path: searchPath,
       deleteAction,
+      confirmDelete,
       minSize,
     }: {
       path?: string;
       deleteAction?: "report" | "delete_duplicates";
+      confirmDelete?: boolean;
       minSize?: number;
     }) => {
       notify("tool_start", { path: searchPath, deleteAction });
@@ -329,6 +331,15 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
         // Delete duplicates if requested (keep first file in each group)
         const deleted: string[] = [];
         if (deleteAction === "delete_duplicates") {
+          if (!confirmDelete) {
+            return JSON.stringify({
+              duplicateGroups,
+              totalDuplicateFiles: duplicateGroups.reduce((sum, g) => sum + g.count - 1, 0),
+              action: "report",
+              warning:
+                "Deletion requires explicit confirmation. Re-run with deleteAction='delete_duplicates' and confirmDelete=true.",
+            }, null, 2);
+          }
           for (const group of duplicateGroups) {
             const toDelete = group.files.slice(1); // Keep first
             for (const file of toDelete) {
@@ -365,6 +376,7 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
       schema: z.object({
         path: z.string().optional().describe("Path to search (workspace-relative, default: root)"),
         deleteAction: z.enum(["report", "delete_duplicates"]).optional().describe("Action: report only or delete duplicates"),
+        confirmDelete: z.boolean().optional().describe("Required true when deleteAction is delete_duplicates"),
         minSize: z.number().optional().describe("Minimum file size in bytes to consider"),
       }),
     }
@@ -549,10 +561,12 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }: T
       paths,
       pattern,
       dryRun,
+      confirmDelete,
     }: {
       paths?: string[];
       pattern?: string;
       dryRun?: boolean;
+      confirmDelete?: boolean;
     }) => {
       notify("tool_start", { paths, pattern, dryRun });
       try {
@@ -575,6 +589,23 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }: T
         }
 
         const results: DeleteResult[] = [];
+        if (!dryRun && !confirmDelete) {
+          const preview = filesToDelete.map((file) => ({
+            path: path.relative(workspaceRoot, file),
+            wouldDelete: true,
+          }));
+          return JSON.stringify(
+            {
+              results: preview,
+              dryRun: true,
+              warning:
+                "Deletion requires explicit confirmation. Re-run with confirmDelete=true to execute.",
+            },
+            null,
+            2
+          );
+        }
+
         for (const file of filesToDelete) {
           const relativePath = path.relative(workspaceRoot, file);
           if (dryRun) {
@@ -610,6 +641,7 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }: T
         paths: z.array(z.string()).optional().describe("Specific file paths to delete"),
         pattern: z.string().optional().describe("Glob pattern to match files to delete"),
         dryRun: z.boolean().optional().describe("Preview deletions without actually deleting"),
+        confirmDelete: z.boolean().optional().describe("Required true to execute actual deletion"),
       }),
     }
   );

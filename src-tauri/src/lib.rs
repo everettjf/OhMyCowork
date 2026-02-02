@@ -24,8 +24,10 @@ struct RpcRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SendMessageParams {
+    provider: Option<String>,
     api_key: String,
     model: String,
+    base_url: Option<String>,
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
     request_id: Option<String>,
@@ -50,8 +52,10 @@ type PendingRequests = Mutex<HashMap<u64, oneshot::Sender<Result<String, String>
 #[tauri::command]
 async fn send_message(
     app: tauri::AppHandle,
+    provider: Option<String>,
     api_key: String,
     model: String,
+    base_url: Option<String>,
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
     request_id: Option<String>,
@@ -62,8 +66,10 @@ async fn send_message(
         id,
         method: "sendMessage".to_string(),
         params: SendMessageParams {
+            provider,
             api_key,
             model,
+            base_url,
             messages,
             workspace_path,
             request_id,

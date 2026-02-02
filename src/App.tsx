@@ -20,14 +20,6 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { open as openDialog, confirm } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
@@ -51,8 +43,10 @@ import rehypeKatex from "rehype-katex";
 
 import type { Thread, Message, WorkspaceEntry } from "@/types";
 import { sendMessage } from "@/services/agent";
-import { useSettings, DEFAULT_SETTINGS } from "@/hooks/useSettings";
+import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import { PROVIDER_PRESETS } from "@/lib/providers";
 
 function App() {
   const [threads, setThreads] = useState<Thread[]>([
@@ -74,9 +68,7 @@ function App() {
     ],
   }));
 
-  const { settings, loaded: settingsLoaded, error: settingsError, saveSettings, clearError } = useSettings();
-  const [draftApiKey, setDraftApiKey] = useState("");
-  const [draftModel, setDraftModel] = useState(DEFAULT_SETTINGS.model);
+  const { settings, saveSettings } = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -175,12 +167,6 @@ function App() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    setDraftApiKey(settings.apiKey);
-    setDraftModel(settings.model);
-  }, [settings, settingsLoaded]);
 
   const filteredThreads = useMemo(() => {
     const query = threadQuery.trim().toLowerCase();
@@ -320,16 +306,62 @@ function App() {
     }));
   };
 
+  const isLikelyFileOperationRequest = (text: string) => {
+    const t = text.toLowerCase();
+    return /(file|folder|workspace|path|rename|delete|remove|copy|move|organize|excel|word|powerpoint|pdf|image|video|csv|archive|zip|unzip|文件|文件夹|路径|重命名|删除|拷贝|复制|移动|整理|表格|文档|图片|视频|压缩)/i.test(
+      t
+    );
+  };
+
+  const isLikelyDestructiveDeleteRequest = (text: string) => {
+    const t = text.toLowerCase();
+    const hasExplicitToolCall = /file_delete|delete_duplicates/.test(t);
+    const hasDeleteVerb = /(delete|remove|erase|purge|wipe|删除|清除)/i.test(t);
+    const hasFileTarget =
+      /(file|folder|directory|path|workspace|duplicate|tmp|log|文件|文件夹|目录|路径|重复)/i.test(t);
+    const looksSafePreview =
+      /(dry[ -]?run|preview|report only|只预览|仅预览|不删除|仅报告)/i.test(t);
+
+    return (hasExplicitToolCall || (hasDeleteVerb && hasFileTarget)) && !looksSafePreview;
+  };
+
   const handleSendMessage = async () => {
     if (isSending) return;
     const trimmed = messageDraft.trim();
     if (!trimmed) return;
 
-    if (!settings.apiKey || !settings.model) {
+    if (!activeWorkspacePath && isLikelyFileOperationRequest(trimmed)) {
       addMessage(activeThreadId, {
         id: `m-${Date.now()}`,
         role: "system",
-        text: "OpenRouter key or model missing. Open settings to configure.",
+        text: "Please provide/select a workspace folder first, then I can run file operations safely.",
+        timestamp: "Just now",
+      });
+      return;
+    }
+
+    if (isLikelyDestructiveDeleteRequest(trimmed)) {
+      const confirmedDelete = await confirm(
+        "This may permanently delete files. Do you want to continue?",
+        { title: "Confirm Deletion", kind: "warning" }
+      );
+      if (!confirmedDelete) {
+        addMessage(activeThreadId, {
+          id: `m-${Date.now()}`,
+          role: "system",
+          text: "Deletion request cancelled.",
+          timestamp: "Just now",
+        });
+        return;
+      }
+    }
+
+    const providerConfig = settings.providers[settings.activeProvider];
+    if (!providerConfig?.apiKey || !providerConfig?.model) {
+      addMessage(activeThreadId, {
+        id: `m-${Date.now()}`,
+        role: "system",
+        text: "Provider API key or model missing. Open settings to configure.",
         timestamp: "Just now",
       });
       return;
@@ -378,8 +410,10 @@ function App() {
 
       const response = await sendMessage(
         {
-          apiKey: settings.apiKey,
-          model: settings.model,
+          provider: settings.activeProvider,
+          apiKey: providerConfig.apiKey,
+          model: providerConfig.model,
+          baseUrl: providerConfig.baseUrl,
         },
         chatMessages,
         requestId,
@@ -411,21 +445,10 @@ function App() {
     }
   };
 
-  const handleSaveSettings = async () => {
-    const success = await saveSettings({
-      apiKey: draftApiKey,
-      model: draftModel,
-    });
-    if (success) {
-      setSettingsOpen(false);
-    }
-  };
-
-  const handleCancelSettings = () => {
-    setDraftApiKey(settings.apiKey);
-    setDraftModel(settings.model);
-    clearError();
-    setSettingsOpen(false);
+  const handleSaveSettings = async (nextSettings: typeof settings) => {
+    const success = await saveSettings(nextSettings);
+    if (success) setSettingsOpen(false);
+    return success;
   };
 
   const renderWorkspaceEntries = (path: string, depth = 0) => {
@@ -569,7 +592,7 @@ function App() {
               </div>
             </div>
             <div className="text-right text-xs text-muted-foreground">
-              Model: {settings.model || "Not configured"}
+              Provider: {settings.activeProvider} · Model: {settings.providers[settings.activeProvider]?.model || "Not configured"}
             </div>
           </header>
 
@@ -747,65 +770,13 @@ function App() {
         </SidebarContent>
       </Sidebar>
 
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>System settings</DialogTitle>
-            <DialogDescription>
-              Configure API credentials and default model.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs font-medium">OpenRouter API Key</label>
-              <Input
-                type="password"
-                value={draftApiKey}
-                onChange={(event) => setDraftApiKey(event.target.value)}
-                placeholder="sk-or-..."
-              />
-              <div className="text-xs text-muted-foreground">
-                Get your key at{" "}
-                <a
-                  className="underline underline-offset-2"
-                  href="https://openrouter.ai/settings/keys"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  https://openrouter.ai/settings/keys
-                </a>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs font-medium">Model</label>
-                <a
-                  className="text-xs text-muted-foreground underline underline-offset-2"
-                  href="https://openrouter.ai/models"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  https://openrouter.ai/models
-                </a>
-              </div>
-              <Input
-                value={draftModel}
-                onChange={(event) => setDraftModel(event.target.value)}
-                placeholder="openai/gpt-4o-mini"
-              />
-            </div>
-            {settingsError ? (
-              <div className="text-xs text-destructive">{settingsError}</div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCancelSettings}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveSettings}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SettingsPanel
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        settings={settings}
+        providers={PROVIDER_PRESETS}
+        onSave={handleSaveSettings}
+      />
       <SkillsPanel
         open={skillsOpen}
         onOpenChange={setSkillsOpen}

@@ -1,3 +1,4 @@
+import { ProviderId } from "@/lib/providers";
 import { invoke } from "@tauri-apps/api/core";
 
 export type ChatMessage = {
@@ -6,8 +7,10 @@ export type ChatMessage = {
 };
 
 export type AgentConfig = {
+  provider: ProviderId;
   apiKey: string;
   model: string;
+  baseUrl?: string;
 };
 
 export async function sendMessage(
@@ -17,8 +20,10 @@ export async function sendMessage(
   workspacePath?: string | null
 ): Promise<string> {
   return invoke<string>("send_message", {
+    provider: config.provider,
     apiKey: config.apiKey,
     model: config.model,
+    baseUrl: config.baseUrl ?? null,
     messages,
     workspacePath: workspacePath ?? null,
     requestId,

@@ -43,7 +43,18 @@ import {
 } from "./tools/index.js";
 import { createFolderOrganizerSubagent } from "./subagents/folder_organizer.js";
 
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  openrouter: "https://openrouter.ai/api/v1",
+  openai: "https://api.openai.com/v1",
+  groq: "https://api.groq.com/openai/v1",
+  together: "https://api.together.xyz/v1",
+  fireworks: "https://api.fireworks.ai/inference/v1",
+  deepseek: "https://api.deepseek.com/v1",
+  mistral: "https://api.mistral.ai/v1",
+  perplexity: "https://api.perplexity.ai",
+  xai: "https://api.x.ai/v1",
+  moonshot: "https://api.moonshot.cn/v1",
+};
 const AGENT_NAME = "ohmycowork";
 
 interface FileInfo {
@@ -110,12 +121,23 @@ function emitAgentStatus(payload?: AgentStatusPayload): void {
   );
 }
 
-function createChatModel(apiKey: string, model: string): ChatOpenAI {
+function resolveBaseUrl(provider?: string, baseUrl?: string): string {
+  if (typeof baseUrl === "string" && baseUrl.trim().length > 0) return baseUrl.trim();
+  const key = typeof provider === "string" ? provider.toLowerCase() : "openrouter";
+  return PROVIDER_BASE_URLS[key] ?? PROVIDER_BASE_URLS.openrouter;
+}
+
+function createChatModel(
+  apiKey: string,
+  model: string,
+  provider?: string,
+  baseUrl?: string
+): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     model,
     configuration: {
-      baseURL: OPENROUTER_BASE_URL,
+      baseURL: resolveBaseUrl(provider, baseUrl),
     },
   });
 }
@@ -147,7 +169,7 @@ interface SkillsConfig {
   skills: string[];
 }
 
-function buildSkillsConfig(workspacePath: string): SkillsConfig {
+function buildSkillsConfig(workspacePath?: string): SkillsConfig {
   const settings = createSettings({
     startPath: workspacePath ?? process.cwd(),
   });
@@ -198,18 +220,22 @@ interface Message {
 }
 
 interface SendMessageRequest {
+  provider?: string;
   apiKey: string;
   model: string;
+  baseUrl?: string;
   messages: Message[];
   workspacePath?: string;
   requestId?: string;
 }
 
 async function sendMessage(request: SendMessageRequest): Promise<string> {
-  const { apiKey, model, messages, workspacePath, requestId } = request;
-  const workspaceRoot = workspacePath ?? process.cwd();
+  const { provider, apiKey, model, baseUrl, messages, workspacePath, requestId } = request;
+  const workspaceRoot = typeof workspacePath === "string" && workspacePath.trim().length > 0
+    ? workspacePath
+    : undefined;
 
-  const chatModel = createChatModel(apiKey, model);
+  const chatModel = createChatModel(apiKey, model, provider, baseUrl);
 
   const emitStatus: StatusEmitter = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
 
@@ -307,15 +333,21 @@ When using file tools, always use workspace-relative paths (e.g., "/file.txt", n
 `;
 
   // Add workspace context
-  if (workspacePath) {
+  if (workspaceRoot) {
     systemPrompt += `
 ## Workspace
 The user's workspace is mounted at virtual path "/". When using filesystem tools, always use paths relative to "/" - NOT absolute system paths.
 - To list the workspace root: use path "/"
 - To read a file: use path "/filename.txt", NOT "/Users/.../filename.txt"
-- The actual system path "${workspacePath}" is mapped to virtual path "/"
+- The actual system path "${workspaceRoot}" is mapped to virtual path "/"
 
 IMPORTANT: Never use absolute system paths like "/Users/..." with filesystem tools. Always use virtual paths starting with "/".`;
+  } else {
+    systemPrompt += `
+## Workspace
+No workspace folder is currently selected.
+- For any file/folder/document/media operation, first ask the user to provide or select a workspace folder.
+- Do not call filesystem tools until a workspace is provided.`;
   }
 
   const { backend, skills } = buildSkillsConfig(workspaceRoot);

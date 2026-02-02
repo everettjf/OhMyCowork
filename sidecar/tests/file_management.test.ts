@@ -282,7 +282,7 @@ describe("File Management Tools", () => {
       });
 
       const tool = createFileDeleteTool({ workspaceRoot, emitStatus });
-      const result = await tool.invoke({ paths: ["to_delete.txt"] });
+      const result = await tool.invoke({ paths: ["to_delete.txt"], confirmDelete: true });
       const parsed = JSON.parse(result);
 
       expect(parsed.results[0].deleted).toBe(true);
@@ -299,6 +299,7 @@ describe("File Management Tools", () => {
       const tool = createFileDeleteTool({ workspaceRoot, emitStatus });
       const result = await tool.invoke({
         paths: ["file1.txt", "file2.txt"],
+        confirmDelete: true,
       });
       const parsed = JSON.parse(result);
 
@@ -316,7 +317,7 @@ describe("File Management Tools", () => {
       });
 
       const tool = createFileDeleteTool({ workspaceRoot, emitStatus });
-      const result = await tool.invoke({ pattern: "**/*.log" });
+      const result = await tool.invoke({ pattern: "**/*.log", confirmDelete: true });
       const parsed = JSON.parse(result);
 
       expect(parsed.results.filter((r) => r.deleted).length).toBe(2);

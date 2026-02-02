@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,160 +15,207 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, ExternalLink, AlertCircle } from "lucide-react";
+import { AlertCircle, ExternalLink, KeyRound, Cpu, Link2 } from "lucide-react";
+import { ProviderId, ProviderPreset, PROVIDER_PRESETS } from "@/lib/providers";
+import { Settings } from "@/hooks/useSettings";
 
 interface SettingsPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  settings: {
-    apiKey: string;
-    model: string;
-  };
-  onSave: (settings: {
-    apiKey: string;
-    model: string;
-    provider: string;
-  }) => Promise<boolean>;
+  settings: Settings;
+  providers?: ProviderPreset[];
+  onSave: (settings: Settings) => Promise<boolean>;
 }
 
-const OPENROUTER_MODELS = [
-  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI", description: "Most capable GPT-4 model" },
-  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", description: "Fast and affordable" },
-  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic", description: "Best for coding" },
-  { id: "anthropic/claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", description: "Most powerful Claude" },
-  { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5", provider: "Google", description: "Google's best model" },
-  { id: "meta-llama/llama-3.1-405b-instruct", name: "Llama 3.1 405B", provider: "Meta", description: "Open source powerhouse" },
-  { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B", provider: "Meta", description: "Fast open source" },
-  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek", description: "Cost-effective alternative" },
-  { id: "mistralai/mistral-large", name: "Mistral Large", provider: "Mistral", description: "Powerful European model" },
-  { id: "qwen/qwen-2.5-72b-instruct", name: "Qwen 2.5 72B", provider: "Alibaba", description: "Leading Chinese model" },
-];
-
-export function SettingsPanel({ open, onOpenChange, settings, onSave }: SettingsPanelProps) {
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("openai/gpt-4o-mini");
+export function SettingsPanel({
+  open,
+  onOpenChange,
+  settings,
+  providers = PROVIDER_PRESETS,
+  onSave,
+}: SettingsPanelProps) {
+  const [draft, setDraft] = useState<Settings>(settings);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setApiKey(settings.apiKey || "");
-    setModel(settings.model || "openai/gpt-4o-mini");
-    setError(null);
+    if (open) {
+      setDraft(settings);
+      setError(null);
+    }
   }, [open, settings]);
 
+  const activeProvider = draft.activeProvider;
+  const activePreset = useMemo(
+    () => providers.find((p) => p.id === activeProvider),
+    [providers, activeProvider]
+  );
+  const activeConfig = draft.providers[activeProvider];
+
+  const configuredCount = useMemo(
+    () => providers.filter((p) => (draft.providers[p.id]?.apiKey || "").trim().length > 0).length,
+    [providers, draft.providers]
+  );
+
+  const updateProviderField = (providerId: ProviderId, field: "apiKey" | "model" | "baseUrl", value: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [providerId]: {
+          ...prev.providers[providerId],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
   const handleSave = async () => {
+    const cfg = draft.providers[draft.activeProvider];
+    if (!cfg?.apiKey?.trim()) {
+      setError(`Please enter an API key for ${activePreset?.name ?? "the selected provider"}.`);
+      return;
+    }
+    if (!cfg?.model?.trim()) {
+      setError("Please enter a model name.");
+      return;
+    }
+    if (!cfg?.baseUrl?.trim()) {
+      setError("Please enter a base URL.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
-
-    if (!apiKey.trim()) {
-      setError("Please enter your OpenRouter API key");
-      setSaving(false);
-      return;
-    }
-
-    if (!model) {
-      setError("Please select a model");
-      setSaving(false);
-      return;
-    }
-
     try {
       const success = await onSave({
-        apiKey: apiKey.trim(),
-        model,
-        provider: "openrouter",
+        ...draft,
+        providers: {
+          ...draft.providers,
+          [draft.activeProvider]: {
+            ...cfg,
+            apiKey: cfg.apiKey.trim(),
+            model: cfg.model.trim(),
+            baseUrl: cfg.baseUrl.trim(),
+          },
+        },
       });
       if (success) onOpenChange(false);
-      else setError("Failed to save settings");
+      else setError("Failed to save settings.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save settings");
+      setError(err instanceof Error ? err.message : "Failed to save settings.");
     } finally {
       setSaving(false);
     }
   };
 
-  const selectedModel = OPENROUTER_MODELS.find((m) => m.id === model);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-primary" />
-            Settings
+            <Cpu className="h-5 w-5 text-primary" />
+            Multi-Provider Model Settings
           </DialogTitle>
-          <DialogDescription>Configure your API credentials and select a model.</DialogDescription>
+          <DialogDescription>
+            Configure API keys, models, and base URLs for multiple LangChain-compatible providers.
+            <span className="ml-1">{configuredCount}/{providers.length} configured.</span>
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">OpenRouter API Key</label>
-              <a
-                href="https://openrouter.ai/settings/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                Get API Key
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <Input
-              type="password"
-              placeholder="sk-or-v1-..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-sm font-medium">Model</label>
-            <Select value={model} onValueChange={setModel}>
+            <label className="text-sm font-medium">Active Provider</label>
+            <Select
+              value={activeProvider}
+              onValueChange={(value) =>
+                setDraft((prev) => ({ ...prev, activeProvider: value as ProviderId }))
+              }
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Select a model">
-                  {selectedModel && (
-                    <div className="flex items-center gap-2">
-                      <span>{selectedModel.name}</span>
-                      <span className="text-xs text-muted-foreground">({selectedModel.provider})</span>
-                    </div>
-                  )}
-                </SelectValue>
+                <SelectValue placeholder="Select provider" />
               </SelectTrigger>
               <SelectContent>
-                {OPENROUTER_MODELS.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    <div className="flex flex-col">
+                {providers.map((provider) => {
+                  const hasKey = (draft.providers[provider.id]?.apiKey || "").trim().length > 0;
+                  return (
+                    <SelectItem key={provider.id} value={provider.id}>
                       <div className="flex items-center gap-2">
-                        <span>{m.name}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          {m.provider}
-                        </span>
+                        <span>{provider.name}</span>
+                        {hasKey ? (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">Configured</span>
+                        ) : (
+                          <span className="rounded border border-border px-1.5 py-0.5 text-[10px]">No Key</span>
+                        )}
                       </div>
-                      <span className="text-xs text-muted-foreground">{m.description}</span>
-                    </div>
-                  </SelectItem>
-                ))}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
-          </div>
 
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4" />
-              {error}
+            <div className="rounded-lg border border-border/60 p-3 text-xs text-muted-foreground">
+              <p>Default provider is OpenRouter. You can switch providers anytime.</p>
+              <p className="mt-1">Each provider keeps its own API key, model, and base URL.</p>
             </div>
-          )}
-
-          <div className="flex items-center justify-end gap-2 border-t pt-4">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Settings"}
-            </Button>
           </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">{activePreset?.name ?? "Provider"} Config</label>
+              {activePreset?.docsUrl ? (
+                <a
+                  href={activePreset.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Docs
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium flex items-center gap-1"><KeyRound className="h-3.5 w-3.5" /> API Key</label>
+              <Input
+                type="password"
+                placeholder="Enter API key"
+                value={activeConfig?.apiKey ?? ""}
+                onChange={(e) => updateProviderField(activeProvider, "apiKey", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium flex items-center gap-1"><Cpu className="h-3.5 w-3.5" /> Model</label>
+              <Input
+                placeholder={activePreset?.defaultModel ?? "Model name"}
+                value={activeConfig?.model ?? ""}
+                onChange={(e) => updateProviderField(activeProvider, "model", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium flex items-center gap-1"><Link2 className="h-3.5 w-3.5" /> Base URL</label>
+              <Input
+                placeholder={activePreset?.defaultBaseUrl ?? "https://..."}
+                value={activeConfig?.baseUrl ?? ""}
+                onChange={(e) => updateProviderField(activeProvider, "baseUrl", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            {error}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-end gap-2 border-t pt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
         </div>
       </DialogContent>
     </Dialog>
