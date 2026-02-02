@@ -4,6 +4,7 @@ import * as readline from "readline";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  // Core utilities
   createCalculateExpressionTool,
   createGenerateUuidTool,
   createGetTimeTool,
@@ -12,6 +13,31 @@ import {
   createAgentBrowserTool,
   createRandomNumberTool,
   createRunNodeTool,
+  // File management
+  createOrganizeFolderTool,
+  createFileSearchTool,
+  createFileRenameTool,
+  createFindDuplicatesTool,
+  createFolderStructureTool,
+  createFileCopyMoveTool,
+  createFileDeleteTool,
+  // Office documents
+  createExcelOperationsTool,
+  createWordOperationsTool,
+  createPowerPointOperationsTool,
+  // PDF
+  createPDFOperationsTool,
+  // Media
+  createImageOperationsTool,
+  createVideoOperationsTool,
+  // Data analysis
+  createDataAnalysisTool,
+  // Archives
+  createArchiveOperationsTool,
+  // Web
+  createWebOperationsTool,
+  // Format conversion
+  createFormatConversionTool,
 } from "./tools/index.js";
 import { createFolderOrganizerSubagent } from "./subagents/folder_organizer.js";
 
@@ -54,10 +80,6 @@ function createChatModel(apiKey, model) {
     model,
     configuration: {
       baseURL: OPENROUTER_BASE_URL,
-      // defaultHeaders: {
-      //   "HTTP-Referer": "https://ohmyco.work",
-      //   "X-Title": "Oh My Cowork",
-      // },
     },
   });
 }
@@ -80,7 +102,6 @@ function formatMessageContent(content) {
 }
 
 function buildSkillsConfig(workspacePath) {
-  // Skills use DeepAgents' standard user/project paths with a workspace fallback.
   const settings = createSettings({
     startPath: workspacePath ?? process.cwd(),
   });
@@ -108,7 +129,6 @@ function buildSkillsConfig(workspacePath) {
   const routeKeys = Object.keys(routes);
   let defaultBackend;
   try {
-    // Workspace-only filesystem backend for safe file access.
     defaultBackend = new FilesystemBackend({
       rootDir: workspacePath ?? process.cwd(),
       virtualMode: true,
@@ -149,6 +169,7 @@ async function sendMessage(request) {
 
   // Create tools array
   const tools = [
+    // Core utilities
     createGetTimeTool({ requestId, emitStatus }),
     createGetTimezoneTool({ requestId, emitStatus }),
     createRandomNumberTool({ requestId, emitStatus }),
@@ -156,7 +177,42 @@ async function sendMessage(request) {
     createCalculateExpressionTool({ requestId, emitStatus }),
     createRunNodeTool({ requestId, emitStatus }),
     createAgentBrowserTool({ requestId, emitStatus }),
+
+    // File management
+    createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus }),
+    createFileSearchTool({ workspaceRoot, requestId, emitStatus }),
+    createFileRenameTool({ workspaceRoot, requestId, emitStatus }),
+    createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus }),
+    createFolderStructureTool({ workspaceRoot, requestId, emitStatus }),
+    createFileCopyMoveTool({ workspaceRoot, requestId, emitStatus }),
+    createFileDeleteTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Office documents
+    createExcelOperationsTool({ workspaceRoot, requestId, emitStatus }),
+    createWordOperationsTool({ workspaceRoot, requestId, emitStatus }),
+    createPowerPointOperationsTool({ workspaceRoot, requestId, emitStatus }),
+
+    // PDF operations
+    createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Media processing
+    createImageOperationsTool({ workspaceRoot, requestId, emitStatus }),
+    createVideoOperationsTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Data analysis
+    createDataAnalysisTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Archive operations
+    createArchiveOperationsTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Web operations
+    createWebOperationsTool({ workspaceRoot, requestId, emitStatus }),
+
+    // Format conversion
+    createFormatConversionTool({ workspaceRoot, requestId, emitStatus }),
   ];
+
+  // Add Tavily search if key is available
   if (hasTavilyKey) {
     tools.push(
       createInternetSearchTool({
@@ -167,33 +223,60 @@ async function sendMessage(request) {
     );
   }
 
+  let systemPrompt = `You are an expert assistant with powerful automation capabilities. You have access to a comprehensive set of tools for:
 
-  let systemPrompt = `You are an expert researcher and coworker assistant. Your job is to conduct thorough research and then write a polished report.
+## Core Utilities
+- \`get_time\`, \`get_timezone\`: Get current time and timezone info
+- \`random_number\`, \`generate_uuid\`: Generate random values
+- \`calculate_expression\`: Mathematical calculations
+- \`run_node\`: Execute Node.js code
+- \`internet_search\`: Web search via Tavily (if configured)
+- \`agent_browser\`: Browser automation via Playwright
 
-You have access to an internet search tool as your primary means of gathering information.
+## File Management
+- \`file_search\`: Search files using glob patterns
+- \`file_rename\`: Batch rename files with patterns
+- \`find_duplicates\`: Find and optionally delete duplicate files
+- \`create_folders\`: Create folder structures
+- \`file_copy_move\`: Copy or move files
+- \`file_delete\`: Delete files or folders
+- \`organize_folder\`: Auto-organize files into category folders
 
-## \`internet_search\`
+## Office Documents
+- \`excel_operations\`: Create, read, analyze Excel files, CSV conversion, formulas, pivot tables
+- \`word_operations\`: Create Word documents, templates, Markdown conversion, headers/footers
+- \`powerpoint_operations\`: Create presentations with slides, charts, images, shapes
 
-Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+## PDF Operations
+- \`pdf_operations\`: Create, merge, split, extract text, add watermarks, page numbers, rotate
 
-## \`agent_browser\`
+## Media Processing
+- \`image_operations\`: Resize, crop, convert, compress, blur, sharpen, watermark images
+- \`video_operations\`: Trim, merge, compress, convert, add subtitles, extract frames, create GIFs
 
-Use this to control a headless browser via the agent-browser CLI. Call it with CLI args (e.g. ["open", "https://example.com"]).
-Use a consistent session name per task to keep browser state, and prefer short, repeatable commands.
+## Data Analysis
+- \`data_analysis\`: Read CSV, statistics, correlations, group by, filter, sort, pivot tables, outlier detection
+
+## Archives
+- \`archive_operations\`: ZIP/TAR/GZIP compression and extraction
+
+## Web Operations
+- \`web_operations\`: HTTP requests, HTML parsing, RSS feeds, file downloads, JSON APIs
+
+## Format Conversion
+- \`format_conversion\`: Convert between formats (Markdown/HTML/DOCX, JSON/CSV/YAML, Base64)
 
 ## Subagents
+- folder-organizer: Specialized agent for intelligent folder organization
 
-- folder-organizer: organize a folder into clean, category-based subfolders.
+When using file tools, always use workspace-relative paths (e.g., "/file.txt", not absolute paths).
 `;
 
-  // context
+  // Add workspace context
   if (workspacePath) {
     systemPrompt += `
-
 ## Workspace
-
-The user's workspace is mounted at virtual path "/". When using filesystem tools (ls, read_file, write_file, etc.), always use paths relative to "/" - NOT absolute system paths.
-
+The user's workspace is mounted at virtual path "/". When using filesystem tools, always use paths relative to "/" - NOT absolute system paths.
 - To list the workspace root: use path "/"
 - To read a file: use path "/filename.txt", NOT "/Users/.../filename.txt"
 - The actual system path "${workspacePath}" is mapped to virtual path "/"
@@ -235,7 +318,7 @@ IMPORTANT: Never use absolute system paths like "/Users/..." with filesystem too
   const result = await agent.invoke({ messages: runtimeMessages });
   const responseMessages = result.messages;
 
-  // Debug: 打印所有消息类型、tool calls 和 tool 返回内容
+  // Debug: log message types and tool calls
   console.error(JSON.stringify({
     event: "debug_messages",
     messages: responseMessages?.map((m, i) => ({
@@ -244,7 +327,6 @@ IMPORTANT: Never use absolute system paths like "/Users/..." with filesystem too
       role: m._getType?.() || m.role,
       hasToolCalls: !!(m.tool_calls?.length),
       toolCalls: m.tool_calls?.map(tc => ({ name: tc.name, args: tc.args })),
-      // 如果是 ToolMessage，显示内容
       toolContent: m._getType?.() === "tool" ? m.content?.slice?.(0, 500) : undefined,
     }))
   }));
