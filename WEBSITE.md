@@ -5,7 +5,7 @@ Your local AI coworker for focused work: chat, browse your workspace, and automa
 
 ## Hero
 - Headline: Meet your always-on coworker for deep work.
-- Subhead: Ask questions, search the web, and organize files without leaving your desktop.
+- Subhead: Ask questions and organize files without leaving your desktop.
 - Primary CTA: Download for macOS
 - Secondary CTA: View the docs
 
@@ -17,7 +17,6 @@ Oh My Cowork keeps your tools, workspace, and models in one place. It answers qu
 
 ## Key Features
 - Local workspace context: browse project folders inside the app.
-- Web search tool: fresh results powered by Tavily.
 - Tool status transparency: see which tools were used while the model works.
 - Folder organizer subagent: clean up messy folders by file type.
 - Model choice: plug in any OpenRouter model.
@@ -43,7 +42,6 @@ Oh My Cowork keeps your tools, workspace, and models in one place. It answers qu
 - Tauri + React
 - OpenRouter models
 - DeepAgents + LangChain tools
-- Tavily search
 
 ## FAQ
 **Which models are supported?**  

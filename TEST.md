@@ -29,8 +29,7 @@ npm test
    - `/test.jpg`
    - `/test.pdf`
    - `/test.mp4`（可选，视频能力用）
-4. 如需网络搜索：配置 Tavily API Key
-5. 如需浏览器自动化：先安装浏览器依赖（项目说明里的 browser install 命令）
+4. 如需浏览器自动化：先安装浏览器依赖（项目说明里的 browser install 命令）
 
 ---
 
@@ -60,11 +59,7 @@ npm test
 - [ ] 指令：`用 Node.js 生成斐波那契前 10 项并返回数组。`
 - [ ] 预期：返回 `[0,1,1,2,3,5,8,13,21,34]`
 
-### 2.7 internet_search（可选）
-- [ ] 指令：`搜索“2026 年 AI 代理趋势”，给我前 5 条结果摘要。`
-- [ ] 预期：返回联网搜索结果（未配 key 时应提示不可用）
-
-### 2.8 agent_browser
+### 2.7 agent_browser
 - [ ] 指令：`用浏览器打开 https://example.com 并截图为 /example.png。`
 - [ ] 预期：成功执行打开+截图，文件写入工作区
 
@@ -213,7 +208,7 @@ npm test
 
 | 模块 | 用例数 | 通过 | 失败 | 备注 |
 |---|---:|---:|---:|---|
-| 核心能力 | 8 |  |  |  |
+| 核心能力 | 7 |  |  |  |
 | 文件管理 | 7 |  |  |  |
 | Office | 6 |  |  |  |
 | PDF | 5 |  |  |  |
@@ -223,7 +218,7 @@ npm test
 | 网络能力 | 3 |  |  |  |
 | 格式转换 | 4 |  |  |  |
 | 子代理 | 1 |  |  |  |
-| **总计** | **44** |  |  |  |
+| **总计** | **43** |  |  |  |
 
 ---
 
@@ -232,5 +227,4 @@ npm test
 - `build` 失败：先执行 `npm install --legacy-peer-deps` 后再 `npm run build`
 - 图片能力失败：执行 `npm rebuild sharp`
 - 视频能力失败：本机安装 ffmpeg（macOS: `brew install ffmpeg`）
-- 搜索能力不可用：检查 Tavily API Key 是否配置
 - 路径报错：所有路径使用工作区相对路径（如 `/data.csv`）

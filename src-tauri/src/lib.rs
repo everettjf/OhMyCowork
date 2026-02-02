@@ -28,7 +28,6 @@ struct SendMessageParams {
     model: String,
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
-    tavily_api_key: Option<String>,
     request_id: Option<String>,
 }
 
@@ -55,7 +54,6 @@ async fn send_message(
     model: String,
     messages: Vec<ChatMessage>,
     workspace_path: Option<String>,
-    tavily_api_key: Option<String>,
     request_id: Option<String>,
 ) -> Result<String, String> {
     let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
@@ -68,7 +66,6 @@ async fn send_message(
             model,
             messages,
             workspace_path,
-            tavily_api_key,
             request_id,
         },
     };

@@ -123,7 +123,6 @@ Local-first AI coworker for focused work: chat, browse your workspace, and autom
 
 **APIs**
 - OpenRouter (LLM routing)
-- Tavily (web search, optional)
 
 ## Quick Start
 
@@ -146,7 +145,6 @@ bun run install:browser
 Open **Settings** in the app to configure:
 - OpenRouter API key (required)
 - Default model
-- Tavily API key (optional, enables web search)
 
 ## Project Structure
 
@@ -192,7 +190,6 @@ OhMyCowork/
 - **Rust**: For Tauri compilation
 
 ### Optional
-- **Tavily API key**: For web search functionality
 - **LibreOffice**: For some format conversions
 
 ## Testing Tools

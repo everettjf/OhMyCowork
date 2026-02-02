@@ -10,7 +10,6 @@ import {
   createGenerateUuidTool,
   createGetTimeTool,
   createGetTimezoneTool,
-  createInternetSearchTool,
   createAgentBrowserTool,
   createRandomNumberTool,
   createRunNodeTool,
@@ -203,30 +202,14 @@ interface SendMessageRequest {
   model: string;
   messages: Message[];
   workspacePath?: string;
-  tavilyApiKey?: string;
   requestId?: string;
 }
 
 async function sendMessage(request: SendMessageRequest): Promise<string> {
-  const { apiKey, model, messages, workspacePath, tavilyApiKey, requestId } = request;
+  const { apiKey, model, messages, workspacePath, requestId } = request;
   const workspaceRoot = workspacePath ?? process.cwd();
 
   const chatModel = createChatModel(apiKey, model);
-
-  const normalizedTavilyKey = typeof tavilyApiKey === "string" ? tavilyApiKey.trim() : "";
-  const hasTavilyKey = normalizedTavilyKey.length > 0;
-  const tavilyKeyPreview = hasTavilyKey
-    ? `${normalizedTavilyKey.slice(0, 4)}...${normalizedTavilyKey.slice(-4)}`
-    : "none";
-  const hadWhitespace = typeof tavilyApiKey === "string" && normalizedTavilyKey !== tavilyApiKey;
-  console.error(
-    JSON.stringify({
-      event: "tavily_key_status",
-      hasTavilyKey,
-      tavilyKeyPreview,
-      hadWhitespace,
-    })
-  );
 
   const emitStatus: StatusEmitter = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
 
@@ -275,17 +258,6 @@ async function sendMessage(request: SendMessageRequest): Promise<string> {
     createFormatConversionTool({ workspaceRoot, requestId, emitStatus }),
   ];
 
-  // Add Tavily search if key is available
-  if (hasTavilyKey) {
-    tools.push(
-      createInternetSearchTool({
-        tavilyApiKey: normalizedTavilyKey,
-        requestId,
-        emitStatus,
-      })
-    );
-  }
-
   let systemPrompt = `You are an expert assistant with powerful automation capabilities. You have access to a comprehensive set of tools for:
 
 ## Core Utilities
@@ -293,7 +265,6 @@ async function sendMessage(request: SendMessageRequest): Promise<string> {
 - \`random_number\`, \`generate_uuid\`: Generate random values
 - \`calculate_expression\`: Mathematical calculations
 - \`run_node\`: Execute Node.js code
-- \`internet_search\`: Web search via Tavily (if configured)
 - \`agent_browser\`: Browser automation via Playwright
 
 ## File Management

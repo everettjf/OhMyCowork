@@ -7,7 +7,6 @@ interface ToolCallCardProps {
 }
 
 const toolIcons: Record<string, string> = {
-  internet_search: "🔍",
   agent_browser: "🌐",
   get_time: "🕐",
   get_timezone: "🌍",

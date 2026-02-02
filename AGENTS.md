@@ -42,7 +42,6 @@ Frontend (React) → Tauri IPC → Rust Backend → Node.js Sidecar
 | `generate_uuid` | UUID v4 generation | - |
 | `calculate_expression` | Math evaluation | `expression` |
 | `run_node` | Execute Node.js code | `code`, `timeoutMs?` |
-| `internet_search` | Web search (Tavily) | `query`, `maxResults?`, `topic?` |
 | `agent_browser` | Browser automation | `args[]`, `session?`, `timeoutMs?` |
 
 ### File Management

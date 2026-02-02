@@ -76,7 +76,6 @@ function App() {
   const { settings, loaded: settingsLoaded, error: settingsError, saveSettings, clearError } = useSettings();
   const [draftApiKey, setDraftApiKey] = useState("");
   const [draftModel, setDraftModel] = useState(DEFAULT_SETTINGS.model);
-  const [draftTavilyApiKey, setDraftTavilyApiKey] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
@@ -179,7 +178,6 @@ function App() {
     if (!settingsLoaded) return;
     setDraftApiKey(settings.apiKey);
     setDraftModel(settings.model);
-    setDraftTavilyApiKey(settings.tavilyApiKey);
   }, [settings, settingsLoaded]);
 
   const filteredThreads = useMemo(() => {
@@ -380,7 +378,6 @@ function App() {
         {
           apiKey: settings.apiKey,
           model: settings.model,
-          tavilyApiKey: settings.tavilyApiKey,
         },
         chatMessages,
         requestId,
@@ -416,7 +413,6 @@ function App() {
     const success = await saveSettings({
       apiKey: draftApiKey,
       model: draftModel,
-      tavilyApiKey: draftTavilyApiKey,
     });
     if (success) {
       setSettingsOpen(false);
@@ -426,7 +422,6 @@ function App() {
   const handleCancelSettings = () => {
     setDraftApiKey(settings.apiKey);
     setDraftModel(settings.model);
-    setDraftTavilyApiKey(settings.tavilyApiKey);
     clearError();
     setSettingsOpen(false);
   };
@@ -796,15 +791,6 @@ function App() {
                 value={draftModel}
                 onChange={(event) => setDraftModel(event.target.value)}
                 placeholder="openai/gpt-4o-mini"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium">Tavily API Key (for web search)</label>
-              <Input
-                type="password"
-                value={draftTavilyApiKey}
-                onChange={(event) => setDraftTavilyApiKey(event.target.value)}
-                placeholder="tvly-..."
               />
             </div>
             {settingsError ? (
