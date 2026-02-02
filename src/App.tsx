@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -563,118 +562,109 @@ function App() {
             </div>
           </header>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-4 bg-gradient-to-b from-background via-background to-muted/30 p-4">
-            <Card className="flex min-h-0 flex-1 flex-col border-border/70 bg-card/90 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">
-                  Conversation
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex min-h-0 flex-1 flex-col">
-                <ScrollArea className="flex-1 pr-4">
-                  <div className="space-y-4 pb-2">
-                    {activeMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`rounded-lg border p-3 text-sm shadow-sm ${
-                          message.role === "user"
-                            ? "border-muted/70 bg-muted/50"
-                            : message.role === "system"
-                              ? "border-destructive/40 bg-destructive/10 text-destructive"
-                              : "border-border/60 bg-background"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                          <span>
-                            {message.role === "user"
-                              ? "You"
-                              : message.role === "assistant"
-                                ? "Assistant"
-                                : "System"}
-                          </span>
-                          <span>{message.timestamp}</span>
+          <div className="flex min-h-0 flex-1 flex-col gap-3 bg-gradient-to-b from-background via-background to-muted/30 p-3">
+            <ScrollArea className="min-h-0 flex-1 pr-3">
+              <div className="space-y-3 pb-1">
+                {activeMessages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`rounded-lg border p-3 text-sm shadow-sm ${
+                      message.role === "user"
+                        ? "border-muted/70 bg-muted/50"
+                        : message.role === "system"
+                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                          : "border-border/60 bg-background"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                      <span>
+                        {message.role === "user"
+                          ? "You"
+                          : message.role === "assistant"
+                            ? "Assistant"
+                            : "System"}
+                      </span>
+                      <span>{message.timestamp}</span>
+                    </div>
+                    <div className="mt-2">
+                      {message.status === "pending" ? (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <span
+                            className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
+                            aria-label="Processing"
+                          />
                         </div>
-                        <div className="mt-2">
-                          {message.status === "pending" ? (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <span
-                                className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
-                                aria-label="Processing"
-                              />
-                            </div>
-                          ) : null}
-                          {message.role === "assistant" ? (
-                            <div className="markdown">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkMath]}
-                                rehypePlugins={[rehypeKatex]}
-                                components={{
-                                  a: ({ href, children }) => {
-                                    const safeHref = typeof href === "string" ? href : "";
-                                    return (
-                                      <a
-                                        href={safeHref}
-                                        className="underline underline-offset-2 decoration-muted-foreground/60"
-                                        onClick={(event) => {
-                                          event.preventDefault();
-                                          if (!safeHref) return;
-                                          Promise.resolve(openUrl(safeHref)).catch(() => {
-                                            window.open(safeHref, "_blank", "noopener,noreferrer");
-                                          });
-                                        }}
-                                      >
-                                        {children}
-                                      </a>
-                                    );
-                                  },
-                                  code: ({ inline, className, children, ...props }) => {
-                                    if (inline) {
-                                      return (
-                                        <code
-                                          className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[12px]"
-                                          {...props}
-                                        >
-                                          {children}
-                                        </code>
-                                      );
-                                    }
-                                    return (
-                                      <ScrollArea className="max-h-64 rounded-md border border-border/70 bg-muted/40">
-                                        <pre className="p-3 text-xs leading-relaxed">
-                                          <code className={`font-mono ${className ?? ""}`} {...props}>
-                                            {children}
-                                          </code>
-                                        </pre>
-                                      </ScrollArea>
-                                    );
-                                  },
-                                  blockquote: ({ children }) => (
-                                    <blockquote className="border-l-2 border-primary/40 pl-3 text-muted-foreground">
+                      ) : null}
+                      {message.role === "assistant" ? (
+                        <div className="markdown">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                              a: ({ href, children }) => {
+                                const safeHref = typeof href === "string" ? href : "";
+                                return (
+                                  <a
+                                    href={safeHref}
+                                    className="underline underline-offset-2 decoration-muted-foreground/60"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      if (!safeHref) return;
+                                      Promise.resolve(openUrl(safeHref)).catch(() => {
+                                        window.open(safeHref, "_blank", "noopener,noreferrer");
+                                      });
+                                    }}
+                                  >
+                                    {children}
+                                  </a>
+                                );
+                              },
+                              code: ({ inline, className, children, ...props }) => {
+                                if (inline) {
+                                  return (
+                                    <code
+                                      className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[12px]"
+                                      {...props}
+                                    >
                                       {children}
-                                    </blockquote>
-                                  ),
-                                  table: ({ children }) => (
-                                    <div className="w-full overflow-auto">
-                                      <table className="w-full border-collapse text-left text-xs">
+                                    </code>
+                                  );
+                                }
+                                return (
+                                  <ScrollArea className="max-h-64 rounded-md border border-border/70 bg-muted/40">
+                                    <pre className="p-3 text-xs leading-relaxed">
+                                      <code className={`font-mono ${className ?? ""}`} {...props}>
                                         {children}
-                                      </table>
-                                    </div>
-                                  ),
-                                }}
-                              >
-                                {message.text}
-                              </ReactMarkdown>
-                            </div>
-                          ) : (
-                            <div className="whitespace-pre-wrap">{message.text}</div>
-                          )}
+                                      </code>
+                                    </pre>
+                                  </ScrollArea>
+                                );
+                              },
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-2 border-primary/40 pl-3 text-muted-foreground">
+                                  {children}
+                                </blockquote>
+                              ),
+                              table: ({ children }) => (
+                                <div className="w-full overflow-auto">
+                                  <table className="w-full border-collapse text-left text-xs">
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                            }}
+                          >
+                            {message.text}
+                          </ReactMarkdown>
                         </div>
-                      </div>
-                    ))}
+                      ) : (
+                        <div className="whitespace-pre-wrap">{message.text}</div>
+                      )}
+                    </div>
                   </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+                ))}
+              </div>
+            </ScrollArea>
 
             <Separator />
 
