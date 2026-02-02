@@ -35,6 +35,7 @@ import {
   Search,
   Sparkles,
   Settings,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import ReactMarkdown from "react-markdown";
@@ -574,6 +575,26 @@ function App() {
           >
             <Settings className="mr-2 h-4 w-4" />
             Settings
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => {
+              void openUrl("https://ohmyco.work");
+            }}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Website
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => {
+              void openUrl("https://xnu.app");
+            }}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            More Apps
           </Button>
         </SidebarFooter>
         <SidebarRail />
