@@ -41,6 +41,7 @@ import {
   MessageSquare,
   Plus,
   Search,
+  Sparkles,
   Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -51,6 +52,7 @@ import rehypeKatex from "rehype-katex";
 import type { Thread, Message, WorkspaceEntry } from "@/types";
 import { sendMessage } from "@/services/agent";
 import { useSettings, DEFAULT_SETTINGS } from "@/hooks/useSettings";
+import { SkillsPanel } from "@/components/SkillsPanel";
 
 function App() {
   const [threads, setThreads] = useState<Thread[]>([
@@ -76,6 +78,7 @@ function App() {
   const [draftApiKey, setDraftApiKey] = useState("");
   const [draftModel, setDraftModel] = useState(DEFAULT_SETTINGS.model);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
   const [workspaceEntries, setWorkspaceEntries] = useState<
@@ -536,6 +539,14 @@ function App() {
           <Button
             variant="ghost"
             className="w-full justify-start"
+            onClick={() => setSkillsOpen(true)}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            Skills
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
             onClick={() => setSettingsOpen(true)}
           >
             <Settings className="mr-2 h-4 w-4" />
@@ -619,7 +630,7 @@ function App() {
                                   </a>
                                 );
                               },
-                              code: ({ inline, className, children, ...props }) => {
+                              code: ({ inline, className, children, ...props }: any) => {
                                 if (inline) {
                                   return (
                                     <code
@@ -795,6 +806,11 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SkillsPanel
+        open={skillsOpen}
+        onOpenChange={setSkillsOpen}
+        workspacePath={activeWorkspacePath}
+      />
     </SidebarProvider>
   );
 }

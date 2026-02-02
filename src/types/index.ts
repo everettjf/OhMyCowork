@@ -19,3 +19,21 @@ export type WorkspaceEntry = {
   isDirectory: boolean;
   isFile: boolean;
 };
+
+export type Skill = {
+  id: string;
+  name: string;
+  description: string;
+  category: "bundled" | "managed" | "workspace";
+  enabled: boolean;
+  version?: string;
+  author?: string;
+};
+
+export type ToolCall = {
+  name: string;
+  status: "running" | "completed" | "error";
+  args?: Record<string, unknown>;
+  result?: string;
+  error?: string;
+};
