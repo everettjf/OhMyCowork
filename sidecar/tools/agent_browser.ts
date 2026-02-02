@@ -1,15 +1,16 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { spawn } from "node:child_process";
+import { spawn, ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ToolContext, createNotifier } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 
-function resolveAgentBrowserBin() {
+function resolveAgentBrowserBin(): string | null {
   const envBin = process.env.AGENT_BROWSER_BIN;
   if (envBin && fs.existsSync(envBin)) return envBin;
 
@@ -27,23 +28,38 @@ function resolveAgentBrowserBin() {
   return null;
 }
 
-export function createAgentBrowserTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "agent_browser", detail, requestId });
-    }
-  };
+interface AgentBrowserResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+export function createAgentBrowserTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("agent_browser", emitStatus, requestId);
 
   return tool(
-    async ({ args, session, profile, timeoutMs, cwd }) => {
+    async ({
+      args,
+      session,
+      profile,
+      timeoutMs,
+      cwd,
+    }: {
+      args: string[];
+      session?: string;
+      profile?: string;
+      timeoutMs?: number;
+      cwd?: string;
+    }) => {
       const bin = resolveAgentBrowserBin() ?? "agent-browser";
       const effectiveSession = session ?? requestId ?? "default";
-      const effectiveTimeout = Number.isFinite(timeoutMs) ? timeoutMs : 120000;
+      const effectiveTimeout = Number.isFinite(timeoutMs) ? timeoutMs! : 120000;
       const workingDir = cwd || process.cwd();
 
       notify("tool_start", { args, session: effectiveSession });
 
-      const env = {
+      const env: NodeJS.ProcessEnv = {
         ...process.env,
         AGENT_BROWSER_SESSION: effectiveSession,
       };
@@ -51,8 +67,8 @@ export function createAgentBrowserTool({ requestId, emitStatus }) {
         env.AGENT_BROWSER_PROFILE = profile;
       }
 
-      const result = await new Promise((resolve, reject) => {
-        const child = spawn(bin, args, {
+      const result = await new Promise<AgentBrowserResult>((resolve, reject) => {
+        const child: ChildProcess = spawn(bin, args, {
           cwd: workingDir,
           env,
           stdio: ["ignore", "pipe", "pipe"],
@@ -60,21 +76,21 @@ export function createAgentBrowserTool({ requestId, emitStatus }) {
 
         let stdout = "";
         let stderr = "";
-        const onData = (chunk, target) => {
+        const onData = (chunk: Buffer, target: "stdout" | "stderr") => {
           const text = chunk.toString();
           if (target === "stdout") stdout += text;
           else stderr += text;
         };
 
-        child.stdout?.on("data", (chunk) => onData(chunk, "stdout"));
-        child.stderr?.on("data", (chunk) => onData(chunk, "stderr"));
+        child.stdout?.on("data", (chunk: Buffer) => onData(chunk, "stdout"));
+        child.stderr?.on("data", (chunk: Buffer) => onData(chunk, "stderr"));
 
         const timer = setTimeout(() => {
           child.kill("SIGTERM");
           reject(new Error(`agent-browser timed out after ${effectiveTimeout}ms`));
         }, effectiveTimeout);
 
-        child.on("error", (error) => {
+        child.on("error", (error: NodeJS.ErrnoException) => {
           clearTimeout(timer);
           if (error?.code === "ENOENT") {
             notify("tool_error", { reason: "binary_missing" });
@@ -88,7 +104,7 @@ export function createAgentBrowserTool({ requestId, emitStatus }) {
           reject(error);
         });
 
-        child.on("close", (code, signal) => {
+        child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
           clearTimeout(timer);
           resolve({
             stdout: stdout.trim(),

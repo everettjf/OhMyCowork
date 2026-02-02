@@ -1,18 +1,45 @@
+// @ts-nocheck
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
 import PDFParser from "pdf-parse";
 import fs from "node:fs";
 import path from "node:path";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface ContentItem {
+  type: "text" | "heading" | "paragraph" | "image" | "pageBreak";
+  text?: string;
+  x?: number;
+  y?: number;
+  fontSize?: number;
+  color?: { r: number; g: number; b: number };
+  imagePath?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+}
+
+interface SplitRange {
+  start: number;
+  end: number;
+}
+
+interface PDFOperationParams {
+  operation: string;
+  filePath: string;
+  content?: ContentItem[];
+  pageSize?: "A4" | "Letter" | "Legal";
+  mergeFiles?: string[];
+  splitPages?: number[];
+  splitRange?: SplitRange;
+  outputPath?: string;
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  watermarkRotation?: number;
+  pageNumberPosition?: "bottom-center" | "bottom-right" | "top-center" | "top-right";
+  pageNumberFormat?: string;
+  rotationDegrees?: number;
+  rotatePages?: number[];
 }
 
 const PDFOperationSchema = z.object({
@@ -63,15 +90,11 @@ const PDFOperationSchema = z.object({
   rotatePages: z.array(z.number()).optional().describe("Specific pages to rotate (1-indexed, empty = all)"),
 });
 
-export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "pdf_operations", detail, requestId });
-    }
-  };
+export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("pdf_operations", emitStatus, requestId);
 
   return tool(
-    async (params) => {
+    async (params: PDFOperationParams) => {
       const {
         operation,
         filePath,
@@ -93,6 +116,10 @@ export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }
       notify("tool_start", { operation, filePath });
 
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const fullPath = resolveWorkspacePath(workspaceRoot, filePath);
 
         switch (operation) {
@@ -102,7 +129,7 @@ export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }
             const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
             // Page dimensions
-            const pageSizes = {
+            const pageSizes: Record<string, [number, number]> = {
               A4: [595.28, 841.89],
               Letter: [612, 792],
               Legal: [612, 1008],
@@ -255,7 +282,7 @@ export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }
             const pdf = await PDFDocument.load(pdfBytes);
             const totalPages = pdf.getPageCount();
 
-            let pagesToExtract = [];
+            let pagesToExtract: number[] = [];
             if (splitPages && splitPages.length > 0) {
               pagesToExtract = splitPages.map((p) => p - 1).filter((p) => p >= 0 && p < totalPages);
             } else if (splitRange) {
@@ -359,7 +386,7 @@ export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }
               const text = format.replace("{n}", pageNum.toString()).replace("{total}", totalPages.toString());
               const textWidth = font.widthOfTextAtSize(text, 10);
 
-              let x, y;
+              let x: number, y: number;
               switch (pageNumberPosition || "bottom-center") {
                 case "bottom-right":
                   x = width - textWidth - 40;
@@ -530,8 +557,9 @@ export function createPDFOperationsTool({ workspaceRoot, requestId, emitStatus }
             throw new Error(`Unknown operation: ${operation}`);
         }
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

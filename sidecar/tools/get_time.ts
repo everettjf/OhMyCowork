@@ -1,12 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
-export function createGetTimeTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "get_time", detail, requestId });
-    }
-  };
+export function createGetTimeTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("get_time", emitStatus, requestId);
 
   return tool(
     async () => {

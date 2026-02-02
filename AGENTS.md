@@ -24,7 +24,8 @@ Frontend (React) → Tauri IPC → Rust Backend → Node.js Sidecar
 
 ## Sidecar Details
 
-- **Entry**: `sidecar/agent.js`
+- **Entry (source)**: `sidecar/agent.ts`
+- **Entry (runtime)**: `sidecar/dist/agent.js`
 - **Protocol**: JSON-RPC 2.0 over stdin/stdout
 - **Model**: OpenRouter via LangChain `ChatOpenAI`
 - **Framework**: DeepAgents with tools, skills, subagents
@@ -232,12 +233,12 @@ export function createMyTool({ workspaceRoot, requestId, emitStatus }) {
 }
 ```
 
-2. Export from `sidecar/tools/index.js`:
+2. Export from `sidecar/tools/index.ts`:
 ```javascript
 export { createMyTool } from "./my_tool.js";
 ```
 
-3. Register in `sidecar/agent.js`:
+3. Register in `sidecar/agent.ts`:
 ```javascript
 import { createMyTool } from "./tools/index.js";
 
@@ -278,7 +279,8 @@ Key npm packages used by tools:
 Run the sidecar directly:
 ```bash
 cd sidecar
-echo '{"id":1,"method":"ping","params":{}}' | node agent.js
+npm run build
+echo '{"id":1,"method":"ping","params":{}}' | node dist/agent.js
 ```
 
 ### Integration Testing

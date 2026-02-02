@@ -1,3 +1,6 @@
+// Shared types
+export * from "./types.js";
+
 // Core utilities
 export { createInternetSearchTool } from "./internet_search.js";
 export { createGetTimeTool } from "./get_time.js";

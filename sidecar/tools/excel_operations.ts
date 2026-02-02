@@ -1,18 +1,44 @@
+// @ts-nocheck
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import ExcelJS from "exceljs";
 import fs from "node:fs";
 import path from "node:path";
 import Papa from "papaparse";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface FormulaEntry {
+  cell: string;
+  formula: string;
+}
+
+interface ConditionalRule {
+  range: string;
+  type: "greaterThan" | "lessThan" | "between" | "containsText" | "colorScale";
+  value?: unknown;
+  style?: {
+    fill?: string;
+    font?: { color?: string; bold?: boolean };
+  };
+}
+
+interface PivotConfig {
+  groupBy?: string;
+  aggregateColumn?: string;
+  aggregateFunc?: "sum" | "avg" | "count" | "min" | "max";
+}
+
+interface ExcelOperationParams {
+  operation: string;
+  filePath: string;
+  sheetName?: string;
+  data?: unknown[][];
+  headers?: string[];
+  formulas?: FormulaEntry[];
+  conditionalRules?: ConditionalRule[];
+  csvPath?: string;
+  mergeFiles?: string[];
+  pivotConfig?: PivotConfig;
 }
 
 const ExcelOperationSchema = z.object({
@@ -30,7 +56,7 @@ const ExcelOperationSchema = z.object({
   ]).describe("The operation to perform"),
   filePath: z.string().describe("Path to the Excel file (relative to workspace)"),
   sheetName: z.string().optional().describe("Name of the worksheet"),
-  data: z.array(z.array(z.any())).optional().describe("Data to write (array of rows)"),
+  data: z.array(z.array(z.unknown())).optional().describe("Data to write (array of rows)"),
   headers: z.array(z.string()).optional().describe("Column headers"),
   formulas: z.array(z.object({
     cell: z.string(),
@@ -39,7 +65,7 @@ const ExcelOperationSchema = z.object({
   conditionalRules: z.array(z.object({
     range: z.string(),
     type: z.enum(["greaterThan", "lessThan", "between", "containsText", "colorScale"]),
-    value: z.any(),
+    value: z.unknown(),
     style: z.object({
       fill: z.string().optional(),
       font: z.object({ color: z.string(), bold: z.boolean().optional() }).optional(),
@@ -54,15 +80,11 @@ const ExcelOperationSchema = z.object({
   }).optional().describe("Pivot table configuration"),
 });
 
-export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "excel_operations", detail, requestId });
-    }
-  };
+export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("excel_operations", emitStatus, requestId);
 
   return tool(
-    async (params) => {
+    async (params: ExcelOperationParams) => {
       const {
         operation,
         filePath,
@@ -79,6 +101,10 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
       notify("tool_start", { operation, filePath });
 
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const fullPath = resolveWorkspacePath(workspaceRoot, filePath);
 
         switch (operation) {
@@ -129,9 +155,9 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
               throw new Error(`Worksheet not found: ${sheetName || "default"}`);
             }
 
-            const rows = [];
+            const rows: { row: number; data: unknown[] }[] = [];
             worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-              const rowData = [];
+              const rowData: unknown[] = [];
               row.eachCell({ includeEmpty: true }, (cell) => {
                 rowData.push(cell.value);
               });
@@ -161,7 +187,23 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
               throw new Error(`Worksheet not found`);
             }
 
-            const analysis = {
+            interface ColumnAnalysis {
+              header: unknown;
+              type: string;
+              nonEmptyCount: number;
+              sum?: number;
+              average?: number;
+              min?: number | null;
+              max?: number | null;
+            }
+
+            const analysis: {
+              sheetName: string;
+              rowCount: number;
+              columnCount: number;
+              sheets: string[];
+              columns: ColumnAnalysis[];
+            } = {
               sheetName: worksheet.name,
               rowCount: worksheet.rowCount,
               columnCount: worksheet.columnCount,
@@ -191,17 +233,20 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
                 }
               });
 
-              analysis.columns.push({
+              const colAnalysis: ColumnAnalysis = {
                 header: cell.value,
                 type: numericCount > textCount ? "numeric" : "text",
                 nonEmptyCount: numericCount + textCount,
-                ...(numericCount > 0 && {
-                  sum,
-                  average: sum / numericCount,
-                  min: min === Infinity ? null : min,
-                  max: max === -Infinity ? null : max,
-                }),
-              });
+              };
+
+              if (numericCount > 0) {
+                colAnalysis.sum = sum;
+                colAnalysis.average = sum / numericCount;
+                colAnalysis.min = min === Infinity ? null : min;
+                colAnalysis.max = max === -Infinity ? null : max;
+              }
+
+              analysis.columns.push(colAnalysis);
             });
 
             notify("tool_end", { operation });
@@ -245,7 +290,7 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
 
             for (const { cell, formula } of formulas) {
-              worksheet.getCell(cell).value = { formula };
+              worksheet.getCell(cell).value = { formula } as ExcelJS.CellFormulaValue;
             }
 
             await workbook.xlsx.writeFile(fullPath);
@@ -268,7 +313,7 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
 
             for (const rule of conditionalRules) {
-              const cfRule = {
+              const cfRule: Record<string, unknown> = {
                 type: rule.type,
                 priority: 1,
               };
@@ -289,26 +334,27 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
                   cfRule.formulae = [String(rule.value)];
                 }
                 if (rule.style) {
-                  cfRule.style = {};
+                  const style: Record<string, unknown> = {};
                   if (rule.style.fill) {
-                    cfRule.style.fill = {
+                    style.fill = {
                       type: "pattern",
                       pattern: "solid",
                       bgColor: { argb: rule.style.fill.replace("#", "FF") },
                     };
                   }
                   if (rule.style.font) {
-                    cfRule.style.font = {
+                    style.font = {
                       color: { argb: rule.style.font.color?.replace("#", "FF") },
                       bold: rule.style.font.bold,
                     };
                   }
+                  cfRule.style = style;
                 }
               }
 
               worksheet.addConditionalFormatting({
                 ref: rule.range,
-                rules: [cfRule],
+                rules: [cfRule as ExcelJS.ConditionalFormattingRule],
               });
             }
 
@@ -323,7 +369,7 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
             const csvFullPath = resolveWorkspacePath(workspaceRoot, csvPath);
             const csvContent = fs.readFileSync(csvFullPath, "utf-8");
-            const parsed = Papa.parse(csvContent, {
+            const parsed = Papa.parse<string[]>(csvContent, {
               header: false,
               skipEmptyLines: true,
             });
@@ -366,9 +412,9 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
               throw new Error("Worksheet not found");
             }
 
-            const rows = [];
+            const rows: unknown[][] = [];
             worksheet.eachRow({ includeEmpty: false }, (row) => {
-              const rowData = [];
+              const rowData: unknown[] = [];
               row.eachCell({ includeEmpty: true }, (cell) => {
                 rowData.push(cell.value);
               });
@@ -391,7 +437,6 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
 
             const outputWorkbook = new ExcelJS.Workbook();
-            let sheetIndex = 1;
 
             for (const file of mergeFiles) {
               const inputPath = resolveWorkspacePath(workspaceRoot, file);
@@ -438,10 +483,10 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
 
             // Read data into array
-            const headers = [];
-            const dataRows = [];
+            const headers: unknown[] = [];
+            const dataRows: unknown[][] = [];
             worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-              const rowData = [];
+              const rowData: unknown[] = [];
               row.eachCell({ includeEmpty: true }, (cell) => {
                 rowData.push(cell.value);
               });
@@ -461,19 +506,19 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             }
 
             // Group and aggregate
-            const groups = new Map();
+            const groups = new Map<unknown, number[]>();
             for (const row of dataRows) {
               const key = row[groupByIndex];
-              const value = parseFloat(row[aggIndex]) || 0;
+              const value = parseFloat(String(row[aggIndex])) || 0;
               if (!groups.has(key)) {
                 groups.set(key, []);
               }
-              groups.get(key).push(value);
+              groups.get(key)!.push(value);
             }
 
-            const result = [];
+            const result: Record<string, unknown>[] = [];
             for (const [key, values] of groups) {
-              let aggregated;
+              let aggregated: number;
               switch (aggregateFunc) {
                 case "sum":
                   aggregated = values.reduce((a, b) => a + b, 0);
@@ -493,7 +538,7 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
                 default:
                   aggregated = values.reduce((a, b) => a + b, 0);
               }
-              result.push({ [groupBy]: key, [aggregateColumn]: aggregated });
+              result.push({ [groupBy!]: key, [aggregateColumn!]: aggregated });
             }
 
             notify("tool_end", { operation });
@@ -509,8 +554,9 @@ export function createExcelOperationsTool({ workspaceRoot, requestId, emitStatus
             throw new Error(`Unknown operation: ${operation}`);
         }
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

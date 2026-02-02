@@ -1,17 +1,65 @@
+// @ts-nocheck
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import ffmpeg from "fluent-ffmpeg";
 import fs from "node:fs";
 import path from "node:path";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface VideoOperationParams {
+  operation: string;
+  filePath: string;
+  outputPath?: string;
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  mergeFiles?: string[];
+  frameCount?: number;
+  frameRate?: number;
+  frameOutput?: string;
+  subtitlePath?: string;
+  subtitleStyle?: string;
+  videoCodec?: "libx264" | "libx265" | "libvpx-vp9" | "copy";
+  audioCodec?: "aac" | "mp3" | "opus" | "copy";
+  videoBitrate?: string;
+  audioBitrate?: string;
+  crf?: number;
+  preset?: "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow";
+  format?: "mp4" | "webm" | "mkv" | "avi" | "mov" | "gif";
+  watermarkPath?: string;
+  watermarkPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center";
+  watermarkScale?: number;
+  width?: number;
+  height?: number;
+  gifFps?: number;
+  gifWidth?: number;
+}
+
+interface VideoStream {
+  codec_name?: string;
+  width?: number;
+  height?: number;
+  r_frame_rate?: string;
+  bit_rate?: string;
+  codec_type?: string;
+}
+
+interface AudioStream {
+  codec_name?: string;
+  channels?: number;
+  sample_rate?: string;
+  bit_rate?: string;
+  codec_type?: string;
+}
+
+interface FfprobeMetadata {
+  format: {
+    format_name?: string;
+    duration?: number;
+    size?: number;
+    bit_rate?: string;
+  };
+  streams: Array<VideoStream | AudioStream>;
 }
 
 const VideoOperationSchema = z.object({
@@ -63,14 +111,10 @@ const VideoOperationSchema = z.object({
   gifWidth: z.number().optional(),
 });
 
-export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "video_operations", detail, requestId });
-    }
-  };
+export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("video_operations", emitStatus, requestId);
 
-  const runFfmpeg = (command) => {
+  const runFfmpeg = (command: ffmpeg.FfmpegCommand): Promise<boolean> => {
     return new Promise((resolve, reject) => {
       command
         .on("end", () => resolve(true))
@@ -80,7 +124,7 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
   };
 
   return tool(
-    async (params) => {
+    async (params: VideoOperationParams) => {
       const {
         operation,
         filePath,
@@ -113,6 +157,10 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
       notify("tool_start", { operation, filePath });
 
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const fullPath = resolveWorkspacePath(workspaceRoot, filePath);
 
         if (!fs.existsSync(fullPath) && operation !== "merge") {
@@ -120,7 +168,7 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
         }
 
         // Default output path
-        const getOutputPath = (defaultExt) => {
+        const getOutputPath = (defaultExt: string): string => {
           if (outputPath) {
             return resolveWorkspacePath(workspaceRoot, outputPath);
           }
@@ -314,7 +362,7 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
             const output = getOutputPath(path.extname(fullPath));
 
             // Position mapping
-            const positions = {
+            const positions: Record<string, string> = {
               "top-left": "10:10",
               "top-right": "main_w-overlay_w-10:10",
               "bottom-left": "10:main_h-overlay_h-10",
@@ -347,15 +395,15 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
 
           case "get_info": {
             return new Promise((resolve) => {
-              ffmpeg.ffprobe(fullPath, (err, metadata) => {
+              ffmpeg.ffprobe(fullPath, (err, metadata: FfprobeMetadata) => {
                 if (err) {
                   notify("tool_error", { error: err.message });
                   resolve(`Error: ${err.message}`);
                   return;
                 }
 
-                const videoStream = metadata.streams.find((s) => s.codec_type === "video");
-                const audioStream = metadata.streams.find((s) => s.codec_type === "audio");
+                const videoStream = metadata.streams.find((s) => s.codec_type === "video") as VideoStream | undefined;
+                const audioStream = metadata.streams.find((s) => s.codec_type === "audio") as AudioStream | undefined;
 
                 const info = {
                   filePath,
@@ -367,7 +415,7 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
                     codec: videoStream.codec_name,
                     width: videoStream.width,
                     height: videoStream.height,
-                    fps: eval(videoStream.r_frame_rate),
+                    fps: videoStream.r_frame_rate ? eval(videoStream.r_frame_rate) : undefined,
                     bitrate: videoStream.bit_rate,
                   } : null,
                   audio: audioStream ? {
@@ -474,8 +522,9 @@ export function createVideoOperationsTool({ workspaceRoot, requestId, emitStatus
             throw new Error(`Unknown operation: ${operation}`);
         }
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

@@ -1,12 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
-export function createGetTimezoneTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "get_timezone", detail, requestId });
-    }
-  };
+export function createGetTimezoneTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("get_timezone", emitStatus, requestId);
 
   return tool(
     async () => {

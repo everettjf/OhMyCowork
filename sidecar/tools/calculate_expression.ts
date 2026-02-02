@@ -1,9 +1,10 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
 const SAFE_EXPRESSION = /^[0-9+\-*/().\s^%]+$/;
 
-function safeEval(expression) {
+function safeEval(expression: string): number {
   const trimmed = expression.trim();
   if (!trimmed || !SAFE_EXPRESSION.test(trimmed)) {
     throw new Error("Expression contains unsupported characters.");
@@ -13,15 +14,11 @@ function safeEval(expression) {
   return Function(`"use strict"; return (${normalized});`)();
 }
 
-export function createCalculateExpressionTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "calculate_expression", detail, requestId });
-    }
-  };
+export function createCalculateExpressionTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("calculate_expression", emitStatus, requestId);
 
   return tool(
-    async ({ expression }) => {
+    async ({ expression }: { expression: string }) => {
       notify("tool_start", { expression });
       const value = safeEval(expression);
       const result = { expression, value };

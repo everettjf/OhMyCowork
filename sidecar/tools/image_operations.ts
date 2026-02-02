@@ -3,15 +3,64 @@ import { z } from "zod";
 import sharp from "sharp";
 import fs from "node:fs";
 import path from "node:path";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface TintColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface OverlayPosition {
+  left?: number;
+  top?: number;
+}
+
+interface ImageOperationParams {
+  operation: string;
+  filePath: string;
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  fit?: "cover" | "contain" | "fill" | "inside" | "outside";
+  cropLeft?: number;
+  cropTop?: number;
+  cropWidth?: number;
+  cropHeight?: number;
+  format?: "jpeg" | "png" | "webp" | "avif" | "gif" | "tiff";
+  quality?: number;
+  angle?: number;
+  flipDirection?: "horizontal" | "vertical" | "both";
+  blurSigma?: number;
+  sharpenSigma?: number;
+  tintColor?: TintColor;
+  watermarkText?: string;
+  watermarkPosition?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  watermarkOpacity?: number;
+  overlayPath?: string;
+  overlayPosition?: OverlayPosition;
+  batchFiles?: string[];
+}
+
+interface ProcessResult {
+  file: string;
+  output?: string;
+  originalSize?: number;
+  newSize?: number;
+  reduction?: string;
+  error?: string;
+  info?: {
+    width?: number;
+    height?: number;
+    format?: string;
+    space?: string;
+    channels?: number;
+    depth?: string;
+    density?: number;
+    hasAlpha?: boolean;
+    orientation?: number;
+    size: number;
+  };
 }
 
 const ImageOperationSchema = z.object({
@@ -74,15 +123,11 @@ const ImageOperationSchema = z.object({
   batchFiles: z.array(z.string()).optional().describe("Multiple files to process"),
 });
 
-export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "image_operations", detail, requestId });
-    }
-  };
+export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("image_operations", emitStatus, requestId);
 
   return tool(
-    async (params) => {
+    async (params: ImageOperationParams) => {
       const {
         operation,
         filePath,
@@ -112,6 +157,10 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
       notify("tool_start", { operation, filePath });
 
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const fullPath = resolveWorkspacePath(workspaceRoot, filePath);
 
         // Handle batch processing
@@ -119,7 +168,7 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
           ? batchFiles.map((f) => resolveWorkspacePath(workspaceRoot, f))
           : [fullPath];
 
-        const results = [];
+        const results: ProcessResult[] = [];
 
         for (const inputPath of filesToProcess) {
           if (!fs.existsSync(inputPath)) {
@@ -162,14 +211,15 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
               });
               break;
 
-            case "compress":
+            case "compress": {
               const metadata = await image.metadata();
               const fmt = format || metadata.format || "jpeg";
-              image = image.toFormat(fmt, {
+              image = image.toFormat(fmt as keyof sharp.FormatEnum, {
                 quality: quality || 70,
                 mozjpeg: fmt === "jpeg",
               });
               break;
+            }
 
             case "rotate":
               image = image.rotate(angle || 90);
@@ -227,7 +277,7 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
 
                 const watermarkBuffer = Buffer.from(svg);
 
-                let gravity = "center";
+                let gravity: string = "center";
                 switch (watermarkPosition) {
                   case "top-left": gravity = "northwest"; break;
                   case "top-right": gravity = "northeast"; break;
@@ -238,7 +288,7 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
 
                 image = image.composite([{
                   input: watermarkBuffer,
-                  gravity,
+                  gravity: gravity as sharp.Gravity,
                 }]);
               }
               break;
@@ -263,7 +313,7 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
               }
               break;
 
-            case "get_info":
+            case "get_info": {
               const info = await sharp(inputPath).metadata();
               results.push({
                 file: inputRelative,
@@ -281,10 +331,11 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
                 },
               });
               continue; // Skip saving for get_info
+            }
           }
 
           // Determine output path
-          let output;
+          let output: string;
           if (outputPath && filesToProcess.length === 1) {
             output = resolveWorkspacePath(workspaceRoot, outputPath);
           } else {
@@ -316,8 +367,9 @@ export function createImageOperationsTool({ workspaceRoot, requestId, emitStatus
         notify("tool_end", { operation, processed: results.length });
         return JSON.stringify({ operation, results }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

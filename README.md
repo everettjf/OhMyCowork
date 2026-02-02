@@ -161,7 +161,8 @@ OhMyCowork/
 │   ├── src/lib.rs         # Tauri setup + IPC
 │   └── tauri.conf.json    # Tauri config
 ├── sidecar/               # Node.js agent
-│   ├── agent.js           # Main agent loop
+│   ├── agent.ts           # Main agent source
+│   ├── dist/agent.js      # Compiled runtime entry
 │   ├── tools/             # 25+ tool implementations
 │   ├── subagents/         # Specialized agents
 │   └── skills/            # Bundled skills

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import * as cheerio from "cheerio";
@@ -29,7 +30,7 @@ const WebOperationSchema = z.object({
   // HTTP request options
   method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
   headers: z.record(z.string()).optional(),
-  body: z.any().optional(),
+  body: z.unknown().optional(),
   // HTML parsing options
   html: z.string().optional().describe("HTML content to parse"),
   selector: z.string().optional().describe("CSS selector"),

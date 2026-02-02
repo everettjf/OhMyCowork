@@ -1,12 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
-export function createRandomNumberTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "random_number", detail, requestId });
-    }
-  };
+export function createRandomNumberTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("random_number", emitStatus, requestId);
 
   return tool(
     async ({ min = 0, max = 1, decimals = 0 }) => {

@@ -1,12 +1,9 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
-export function createGenerateUuidTool({ requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "generate_uuid", detail, requestId });
-    }
-  };
+export function createGenerateUuidTool({ requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("generate_uuid", emitStatus, requestId);
 
   return tool(
     async () => {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { ChatOpenAI } from "@langchain/openai";
 import { CompositeBackend, FilesystemBackend, createDeepAgent, createSettings } from "deepagents";
 import * as readline from "readline";
@@ -38,31 +39,67 @@ import {
   createWebOperationsTool,
   // Format conversion
   createFormatConversionTool,
+  // Types
+  StatusEmitter,
 } from "./tools/index.js";
 import { createFolderOrganizerSubagent } from "./subagents/folder_organizer.js";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const AGENT_NAME = "ohmycowork";
 
+interface FileInfo {
+  path: string;
+  error?: string;
+  content?: unknown;
+}
+
+interface ReadRawResult {
+  content: string[];
+  created_at: string;
+  modified_at: string;
+}
+
+interface WriteResult {
+  error: string | null;
+  filesUpdate: unknown;
+}
+
+interface EditResult {
+  error: string | null;
+  filesUpdate: unknown;
+  occurrences: number;
+}
+
 class NoopBackend {
-  async lsInfo() { return []; }
-  async read() { return "Error: Filesystem access is not available."; }
-  async readRaw() {
+  async lsInfo(): Promise<unknown[]> { return []; }
+  async read(): Promise<string> { return "Error: Filesystem access is not available."; }
+  async readRaw(): Promise<ReadRawResult> {
     return {
       content: ["Error: Filesystem access is not available."],
       created_at: "",
       modified_at: "",
     };
   }
-  async grepRaw() { return "Error: Filesystem access is not available."; }
-  async globInfo() { return []; }
-  async write() { return { error: "permission_denied", filesUpdate: null }; }
-  async edit() { return { error: "permission_denied", filesUpdate: null, occurrences: 0 }; }
-  async uploadFiles(files) { return files.map(([path]) => ({ path, error: "permission_denied" })); }
-  async downloadFiles(paths) { return paths.map((path) => ({ path, content: null, error: "permission_denied" })); }
+  async grepRaw(): Promise<string> { return "Error: Filesystem access is not available."; }
+  async globInfo(): Promise<unknown[]> { return []; }
+  async write(): Promise<WriteResult> { return { error: "permission_denied", filesUpdate: null }; }
+  async edit(): Promise<EditResult> { return { error: "permission_denied", filesUpdate: null, occurrences: 0 }; }
+  async uploadFiles(files: [string, unknown][]): Promise<FileInfo[]> {
+    return files.map(([path]) => ({ path, error: "permission_denied" }));
+  }
+  async downloadFiles(paths: string[]): Promise<FileInfo[]> {
+    return paths.map((path) => ({ path, content: null, error: "permission_denied" }));
+  }
 }
 
-function emitAgentStatus(payload) {
+interface AgentStatusPayload {
+  requestId?: string | null;
+  stage?: string;
+  tool?: string | null;
+  detail?: unknown;
+}
+
+function emitAgentStatus(payload?: AgentStatusPayload): void {
   console.log(
     JSON.stringify({
       event: "agent_status",
@@ -74,7 +111,7 @@ function emitAgentStatus(payload) {
   );
 }
 
-function createChatModel(apiKey, model) {
+function createChatModel(apiKey: string, model: string): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     model,
@@ -84,11 +121,16 @@ function createChatModel(apiKey, model) {
   });
 }
 
-function formatMessageContent(content) {
+interface ContentItem {
+  text?: string;
+  [key: string]: unknown;
+}
+
+function formatMessageContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((item) => {
+      .map((item: string | ContentItem) => {
         if (typeof item === "string") return item;
         if (typeof item === "object" && item && "text" in item) {
           return String(item.text ?? "");
@@ -101,7 +143,12 @@ function formatMessageContent(content) {
   return String(content);
 }
 
-function buildSkillsConfig(workspacePath) {
+interface SkillsConfig {
+  backend: CompositeBackend | NoopBackend;
+  skills: string[];
+}
+
+function buildSkillsConfig(workspacePath: string): SkillsConfig {
   const settings = createSettings({
     startPath: workspacePath ?? process.cwd(),
   });
@@ -112,7 +159,7 @@ function buildSkillsConfig(workspacePath) {
     fs.mkdirSync(projectSkillsDir, { recursive: true });
   }
 
-  const routes = {};
+  const routes: Record<string, FilesystemBackend> = {};
   if (userSkillsDir) {
     routes["/skills/user/"] = new FilesystemBackend({
       rootDir: userSkillsDir,
@@ -127,7 +174,7 @@ function buildSkillsConfig(workspacePath) {
   }
 
   const routeKeys = Object.keys(routes);
-  let defaultBackend;
+  let defaultBackend: FilesystemBackend | NoopBackend;
   try {
     defaultBackend = new FilesystemBackend({
       rootDir: workspacePath ?? process.cwd(),
@@ -144,7 +191,23 @@ function buildSkillsConfig(workspacePath) {
   };
 }
 
-async function sendMessage(request) {
+interface Message {
+  role: string;
+  content: unknown;
+  _getType?: () => string;
+  tool_calls?: Array<{ name: string; args: unknown }>;
+}
+
+interface SendMessageRequest {
+  apiKey: string;
+  model: string;
+  messages: Message[];
+  workspacePath?: string;
+  tavilyApiKey?: string;
+  requestId?: string;
+}
+
+async function sendMessage(request: SendMessageRequest): Promise<string> {
   const { apiKey, model, messages, workspacePath, tavilyApiKey, requestId } = request;
   const workspaceRoot = workspacePath ?? process.cwd();
 
@@ -165,7 +228,7 @@ async function sendMessage(request) {
     })
   );
 
-  const emitStatus = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
+  const emitStatus: StatusEmitter = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
 
   // Create tools array
   const tools = [
@@ -316,24 +379,63 @@ IMPORTANT: Never use absolute system paths like "/Users/..." with filesystem too
     })
   );
   const result = await agent.invoke({ messages: runtimeMessages });
-  const responseMessages = result.messages;
+  const responseMessages = result.messages as Message[];
 
   // Debug: log message types and tool calls
   console.error(JSON.stringify({
     event: "debug_messages",
-    messages: responseMessages?.map((m, i) => ({
+    messages: responseMessages?.map((m: Message, i: number) => ({
       index: i,
-      type: m.constructor?.name || typeof m,
+      type: (m as unknown as { constructor?: { name?: string } }).constructor?.name || typeof m,
       role: m._getType?.() || m.role,
       hasToolCalls: !!(m.tool_calls?.length),
       toolCalls: m.tool_calls?.map(tc => ({ name: tc.name, args: tc.args })),
-      toolContent: m._getType?.() === "tool" ? m.content?.slice?.(0, 500) : undefined,
+      toolContent: m._getType?.() === "tool" ? String(m.content).slice?.(0, 500) : undefined,
     }))
   }));
 
   const lastMessage = responseMessages?.[responseMessages.length - 1];
 
   return formatMessageContent(lastMessage?.content) || "No response from model.";
+}
+
+interface JsonRpcRequest {
+  id: string | number | null;
+  method: string;
+  params: SendMessageRequest;
+}
+
+interface JsonRpcError {
+  code: number;
+  message: string;
+}
+
+interface JsonRpcResponse {
+  id: string | number | null;
+  result?: string;
+  error?: JsonRpcError;
+}
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string") return err;
+
+  const anyErr = err as any;
+  const providerMessage =
+    anyErr?.response?.data?.error?.message ??
+    anyErr?.response?.data?.message ??
+    anyErr?.error?.message ??
+    anyErr?.message;
+  const status = anyErr?.response?.status ?? anyErr?.status;
+
+  if (providerMessage && status) return `${providerMessage} (status ${status})`;
+  if (providerMessage) return String(providerMessage);
+
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
 }
 
 // JSON-RPC style communication via stdin/stdout
@@ -343,13 +445,13 @@ const rl = readline.createInterface({
   terminal: false,
 });
 
-rl.on("line", async (line) => {
+rl.on("line", async (line: string) => {
   try {
-    const request = JSON.parse(line);
+    const request: JsonRpcRequest = JSON.parse(line);
     const { id, method, params } = request;
 
-    let result;
-    let error = null;
+    let result: string | undefined;
+    let error: JsonRpcError | null = null;
 
     try {
       if (method === "sendMessage") {
@@ -360,15 +462,24 @@ rl.on("line", async (line) => {
         error = { code: -32601, message: "Method not found" };
       }
     } catch (err) {
-      error = { code: -32000, message: err.message || "Unknown error" };
+      const message = extractErrorMessage(err);
+      console.error(
+        JSON.stringify({
+          event: "rpc_error",
+          method,
+          message,
+          raw: err,
+        })
+      );
+      error = { code: -32000, message };
     }
 
-    const response = error
+    const response: JsonRpcResponse = error
       ? { id, error }
       : { id, result };
 
     console.log(JSON.stringify(response));
-  } catch (err) {
+  } catch {
     console.log(JSON.stringify({ id: null, error: { code: -32700, message: "Parse error" } }));
   }
 });

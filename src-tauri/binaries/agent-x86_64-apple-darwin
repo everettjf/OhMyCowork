@@ -7,4 +7,11 @@ if [ ! -d "$SIDECAR_DIR" ]; then
   SIDECAR_DIR="$SCRIPT_DIR/../../../sidecar"
 fi
 cd "$SIDECAR_DIR"
-exec node agent.js
+if [ ! -f "dist/agent.js" ]; then
+  if command -v bun >/dev/null 2>&1; then
+    bun run build >/dev/null 2>&1
+  else
+    npm run build >/dev/null 2>&1
+  fi
+fi
+exec node dist/agent.js

@@ -1,35 +1,81 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "node:fs/promises";
-import fsSync from "node:fs";
 import path from "node:path";
 import fg from "fast-glob";
 import { hashFile } from "hasha";
 import pLimit from "p-limit";
 import filenamify from "filenamify";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface FileInfo {
+  path: string;
+  size?: number;
+  modified?: string;
+  isDirectory?: boolean;
+  error?: string;
 }
 
+interface RenameResult {
+  original: string;
+  renamed?: string;
+  wouldRenameTo?: string;
+  success?: boolean;
+  error?: string;
+  dryRun?: boolean;
+}
+
+interface DuplicateGroup {
+  hash: string;
+  files: string[];
+  count: number;
+}
+
+interface FolderItem {
+  name: string;
+  children?: FolderItem[] | string[];
+}
+
+interface DeleteResult {
+  path: string;
+  deleted?: boolean;
+  wouldDelete?: boolean;
+  error?: string;
+}
+
+// Recursive schema so OpenAI function-calling gets valid JSON Schema `items`.
+const FolderStructureItemSchema: z.ZodTypeAny = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.object({
+      name: z.string(),
+      children: z.array(FolderStructureItemSchema).optional(),
+    }),
+  ])
+);
+
 // File search and filter tool
-export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "file_search", detail, requestId });
-    }
-  };
+export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("file_search", emitStatus, requestId);
 
   return tool(
-    async ({ pattern, path: searchPath, ignore, maxResults }) => {
+    async ({
+      pattern,
+      path: searchPath,
+      ignore,
+      maxResults,
+    }: {
+      pattern: string;
+      path?: string;
+      ignore?: string[];
+      maxResults?: number;
+    }) => {
       notify("tool_start", { pattern, path: searchPath });
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const basePath = searchPath
           ? resolveWorkspacePath(workspaceRoot, searchPath)
           : workspaceRoot;
@@ -47,7 +93,7 @@ export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }) {
         const results = files.slice(0, maxResults || 100);
 
         // Get file info for each result
-        const fileInfos = await Promise.all(
+        const fileInfos: FileInfo[] = await Promise.all(
           results.map(async (file) => {
             const fullPath = path.join(basePath, file);
             try {
@@ -67,8 +113,9 @@ export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }) {
         notify("tool_end", { count: fileInfos.length });
         return JSON.stringify({ files: fileInfos, total: files.length }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {
@@ -85,18 +132,34 @@ export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }) {
 }
 
 // Batch file rename tool
-export function createFileRenameTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "file_rename", detail, requestId });
-    }
-  };
+export function createFileRenameTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("file_rename", emitStatus, requestId);
 
   return tool(
-    async ({ files, pattern, replacement, prefix, suffix, sanitize, dryRun }) => {
+    async ({
+      files,
+      pattern,
+      replacement,
+      prefix,
+      suffix,
+      sanitize,
+      dryRun,
+    }: {
+      files: string[];
+      pattern?: string;
+      replacement?: string;
+      prefix?: string;
+      suffix?: string;
+      sanitize?: boolean;
+      dryRun?: boolean;
+    }) => {
       notify("tool_start", { fileCount: files?.length, pattern, replacement });
       try {
-        const results = [];
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
+        const results: RenameResult[] = [];
         const limit = pLimit(5); // Limit concurrent operations
 
         const renameOps = files.map((file) =>
@@ -134,9 +197,10 @@ export function createFileRenameTool({ workspaceRoot, requestId, emitStatus }) {
                   success: true,
                 });
               } catch (error) {
+                const err = error as Error;
                 results.push({
                   original: file,
-                  error: error.message,
+                  error: err.message,
                   success: false,
                 });
               }
@@ -154,8 +218,9 @@ export function createFileRenameTool({ workspaceRoot, requestId, emitStatus }) {
         notify("tool_end", { renamed: results.filter((r) => r.success).length });
         return JSON.stringify({ results, dryRun: !!dryRun }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {
@@ -175,17 +240,25 @@ export function createFileRenameTool({ workspaceRoot, requestId, emitStatus }) {
 }
 
 // Find duplicate files tool
-export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "find_duplicates", detail, requestId });
-    }
-  };
+export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("find_duplicates", emitStatus, requestId);
 
   return tool(
-    async ({ path: searchPath, deleteAction, minSize }) => {
+    async ({
+      path: searchPath,
+      deleteAction,
+      minSize,
+    }: {
+      path?: string;
+      deleteAction?: "report" | "delete_duplicates";
+      minSize?: number;
+    }) => {
       notify("tool_start", { path: searchPath, deleteAction });
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const basePath = searchPath
           ? resolveWorkspacePath(workspaceRoot, searchPath)
           : workspaceRoot;
@@ -210,31 +283,31 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
             }
           })
         );
-        const validFiles = fileStats.filter((f) => f && f.size >= minBytes);
+        const validFiles = fileStats.filter((f): f is { path: string; size: number } => f !== null && f.size >= minBytes);
 
         // Group files by size first (optimization)
-        const sizeGroups = new Map();
+        const sizeGroups = new Map<string, string[]>();
         for (const file of validFiles) {
           const key = file.size.toString();
           if (!sizeGroups.has(key)) sizeGroups.set(key, []);
-          sizeGroups.get(key).push(file.path);
+          sizeGroups.get(key)!.push(file.path);
         }
 
         // Hash files that have same size
-        const duplicateGroups = [];
+        const duplicateGroups: DuplicateGroup[] = [];
         const limit = pLimit(5);
 
         for (const [, paths] of sizeGroups) {
           if (paths.length < 2) continue;
 
-          const hashMap = new Map();
+          const hashMap = new Map<string, string[]>();
           await Promise.all(
             paths.map((filePath) =>
               limit(async () => {
                 try {
                   const hash = await hashFile(filePath, { algorithm: "md5" });
                   if (!hashMap.has(hash)) hashMap.set(hash, []);
-                  hashMap.get(hash).push(filePath);
+                  hashMap.get(hash)!.push(filePath);
                 } catch {
                   // Skip files that can't be hashed
                 }
@@ -254,7 +327,7 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
         }
 
         // Delete duplicates if requested (keep first file in each group)
-        const deleted = [];
+        const deleted: string[] = [];
         if (deleteAction === "delete_duplicates") {
           for (const group of duplicateGroups) {
             const toDelete = group.files.slice(1); // Keep first
@@ -262,7 +335,7 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
               try {
                 await fs.unlink(resolveWorkspacePath(workspaceRoot, file));
                 deleted.push(file);
-              } catch (error) {
+              } catch {
                 // Skip files that can't be deleted
               }
             }
@@ -281,8 +354,9 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
           action: deleteAction || "report",
         }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {
@@ -298,25 +372,31 @@ export function createFindDuplicatesTool({ workspaceRoot, requestId, emitStatus 
 }
 
 // Create folder structure tool
-export function createFolderStructureTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "create_folders", detail, requestId });
-    }
-  };
+export function createFolderStructureTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("create_folders", emitStatus, requestId);
 
   return tool(
-    async ({ structure, basePath }) => {
+    async ({
+      structure,
+      basePath,
+    }: {
+      structure: (string | FolderItem)[];
+      basePath?: string;
+    }) => {
       notify("tool_start", { structure, basePath });
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const base = basePath
           ? resolveWorkspacePath(workspaceRoot, basePath)
           : workspaceRoot;
 
-        const created = [];
-        const errors = [];
+        const created: string[] = [];
+        const errors: { path: string; error: string }[] = [];
 
-        const createRecursive = async (folders, parentPath) => {
+        const createRecursive = async (folders: (string | FolderItem)[], parentPath: string) => {
           for (const folder of folders) {
             const name = typeof folder === "string" ? folder : folder.name;
             const children = typeof folder === "object" ? folder.children : null;
@@ -327,12 +407,13 @@ export function createFolderStructureTool({ workspaceRoot, requestId, emitStatus
               created.push(path.relative(workspaceRoot, folderPath));
 
               if (children && Array.isArray(children)) {
-                await createRecursive(children, folderPath);
+                await createRecursive(children as (string | FolderItem)[], folderPath);
               }
             } catch (error) {
+              const err = error as Error;
               errors.push({
                 path: path.relative(workspaceRoot, folderPath),
-                error: error.message,
+                error: err.message,
               });
             }
           }
@@ -343,41 +424,61 @@ export function createFolderStructureTool({ workspaceRoot, requestId, emitStatus
         notify("tool_end", { created: created.length, errors: errors.length });
         return JSON.stringify({ created, errors }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {
       name: "create_folders",
       description: "Create folder structures from a specification. Supports nested structures.",
       schema: z.object({
-        structure: z.array(
-          z.union([
-            z.string(),
-            z.object({
-              name: z.string(),
-              children: z.array(z.any()).optional(),
-            }),
-          ])
-        ).describe("Folder structure: array of names or {name, children} objects"),
+        structure: z
+          .array(FolderStructureItemSchema)
+          .describe("Folder structure: array of names or {name, children} objects"),
         basePath: z.string().optional().describe("Base path to create structure in"),
       }),
     }
   );
 }
 
-// File copy/move tool
-export function createFileCopyMoveTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "file_copy_move", detail, requestId });
+// Helper to copy directory recursively
+async function copyDir(src: string, dest: string): Promise<void> {
+  await fs.mkdir(dest, { recursive: true });
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(srcPath, destPath);
+    } else {
+      await fs.copyFile(srcPath, destPath);
     }
-  };
+  }
+}
+
+// File copy/move tool
+export function createFileCopyMoveTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("file_copy_move", emitStatus, requestId);
 
   return tool(
-    async ({ operation, source, destination, overwrite }) => {
+    async ({
+      operation,
+      source,
+      destination,
+      overwrite,
+    }: {
+      operation: "copy" | "move";
+      source: string;
+      destination: string;
+      overwrite?: boolean;
+    }) => {
       notify("tool_start", { operation, source, destination });
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const srcPath = resolveWorkspacePath(workspaceRoot, source);
         const destPath = resolveWorkspacePath(workspaceRoot, destination);
 
@@ -421,8 +522,9 @@ export function createFileCopyMoveTool({ workspaceRoot, requestId, emitStatus })
           destination,
         });
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {
@@ -438,34 +540,27 @@ export function createFileCopyMoveTool({ workspaceRoot, requestId, emitStatus })
   );
 }
 
-// Helper to copy directory recursively
-async function copyDir(src, dest) {
-  await fs.mkdir(dest, { recursive: true });
-  const entries = await fs.readdir(src, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      await copyDir(srcPath, destPath);
-    } else {
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
-}
-
 // Delete files tool
-export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "file_delete", detail, requestId });
-    }
-  };
+export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("file_delete", emitStatus, requestId);
 
   return tool(
-    async ({ paths, pattern, dryRun }) => {
+    async ({
+      paths,
+      pattern,
+      dryRun,
+    }: {
+      paths?: string[];
+      pattern?: string;
+      dryRun?: boolean;
+    }) => {
       notify("tool_start", { paths, pattern, dryRun });
       try {
-        let filesToDelete = [];
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
+        let filesToDelete: string[] = [];
 
         if (paths && paths.length > 0) {
           filesToDelete = paths.map((p) => resolveWorkspacePath(workspaceRoot, p));
@@ -479,7 +574,7 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }) {
           filesToDelete = matched;
         }
 
-        const results = [];
+        const results: DeleteResult[] = [];
         for (const file of filesToDelete) {
           const relativePath = path.relative(workspaceRoot, file);
           if (dryRun) {
@@ -494,7 +589,8 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }) {
               }
               results.push({ path: relativePath, deleted: true });
             } catch (error) {
-              results.push({ path: relativePath, error: error.message });
+              const err = error as Error;
+              results.push({ path: relativePath, error: err.message });
             }
           }
         }
@@ -502,8 +598,9 @@ export function createFileDeleteTool({ workspaceRoot, requestId, emitStatus }) {
         notify("tool_end", { deleted: results.filter((r) => r.deleted).length });
         return JSON.stringify({ results, dryRun: !!dryRun }, null, 2);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

@@ -1,6 +1,9 @@
+// @ts-nocheck
 import { createOrganizeFolderTool } from "../tools/index.js";
 
-export function createFolderOrganizerSubagent({ model, workspaceRoot, requestId, emitStatus }) {
+export function createFolderOrganizerSubagent(
+  { model, workspaceRoot, requestId, emitStatus }: any
+): any {
   return {
     name: "folder-organizer",
     description:

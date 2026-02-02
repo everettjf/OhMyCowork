@@ -1,23 +1,36 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { ToolContext, createNotifier } from "./types.js";
 
-export function createInternetSearchTool({ tavilyApiKey, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({
-        stage,
-        tool: "internet_search",
-        detail,
-        requestId,
-      });
-    }
-  };
+interface InternetSearchContext extends ToolContext {
+  tavilyApiKey?: string;
+}
+
+interface TavilyResult {
+  title?: string;
+  url?: string;
+  content?: string;
+  score?: number;
+}
+
+interface TavilyResponse {
+  answer?: string;
+  results?: TavilyResult[];
+  error?: string;
+}
+
+export function createInternetSearchTool({ tavilyApiKey, requestId, emitStatus }: InternetSearchContext) {
+  const notify = createNotifier("internet_search", emitStatus, requestId);
 
   return tool(
     async ({
       query,
       maxResults = 5,
       topic = "general",
+    }: {
+      query: string;
+      maxResults?: number;
+      topic?: "general" | "news" | "finance";
     }) => {
       notify("tool_start", { query, maxResults, topic });
       console.error(JSON.stringify({ event: "tavily_search_query", query, maxResults, topic }));
@@ -35,7 +48,7 @@ export function createInternetSearchTool({ tavilyApiKey, requestId, emitStatus }
         }),
       });
       const text = await response.text();
-      let payload;
+      let payload: TavilyResponse;
       try {
         payload = JSON.parse(text);
       } catch {

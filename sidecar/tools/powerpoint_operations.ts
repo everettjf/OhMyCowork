@@ -1,17 +1,75 @@
+// @ts-nocheck
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import pptxgen from "pptxgenjs";
 import fs from "node:fs";
 import path from "node:path";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface ChartDataItem {
+  name: string;
+  labels: string[];
+  values: number[];
+}
+
+interface SlideElement {
+  type: "text" | "image" | "shape" | "table" | "chart";
+  text?: string;
+  x?: number | string;
+  y?: number | string;
+  w?: number | string;
+  h?: number | string;
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  align?: "left" | "center" | "right";
+  valign?: "top" | "middle" | "bottom";
+  imagePath?: string;
+  shapeType?: "rect" | "roundRect" | "ellipse" | "triangle" | "line" | "arrow";
+  fill?: string;
+  line?: { color: string; width?: number };
+  tableData?: string[][];
+  chartType?: "bar" | "line" | "pie" | "doughnut" | "area";
+  chartData?: ChartDataItem[];
+  chartTitle?: string;
+}
+
+interface SlideConfig {
+  layout?: "title" | "titleAndContent" | "twoColumn" | "blank" | "sectionHeader" | "comparison";
+  title?: string;
+  subtitle?: string;
+  content?: string[];
+  leftContent?: string[];
+  rightContent?: string[];
+  notes?: string;
+  backgroundColor?: string;
+  backgroundImage?: string;
+  elements?: SlideElement[];
+  transition?: "fade" | "push" | "wipe" | "split" | "none";
+}
+
+interface ThemeConfig {
+  primaryColor?: string;
+  secondaryColor?: string;
+  fontFamily?: string;
+}
+
+interface MasterSlideConfig {
+  backgroundColor?: string;
+  logo?: string;
+  footerText?: string;
+}
+
+interface PowerPointOperationParams {
+  operation: string;
+  filePath: string;
+  title?: string;
+  author?: string;
+  subject?: string;
+  slides?: SlideConfig[];
+  theme?: ThemeConfig;
+  masterSlide?: MasterSlideConfig;
 }
 
 const SlideElementSchema = z.object({
@@ -79,15 +137,11 @@ const PowerPointOperationSchema = z.object({
   }).optional().describe("Master slide settings"),
 });
 
-export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "powerpoint_operations", detail, requestId });
-    }
-  };
+export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("powerpoint_operations", emitStatus, requestId);
 
   return tool(
-    async (params) => {
+    async (params: PowerPointOperationParams) => {
       const {
         operation,
         filePath,
@@ -102,6 +156,10 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
       notify("tool_start", { operation, filePath });
 
       try {
+        if (!workspaceRoot) {
+          throw new Error("workspaceRoot is required");
+        }
+
         const fullPath = resolveWorkspacePath(workspaceRoot, filePath);
 
         if (operation === "create" || operation === "add_slides") {
@@ -114,7 +172,7 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
           pptx.company = "Created with OhMyCowork";
 
           // Define master slide
-          const masterConfig = {
+          const masterConfig: pptxgen.SlideMasterProps = {
             title: "MASTER_SLIDE",
             background: { color: masterSlide?.backgroundColor?.replace("#", "") || "FFFFFF" },
           };
@@ -155,7 +213,7 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
 
               // Set transition
               if (slideConfig.transition && slideConfig.transition !== "none") {
-                slide.transition = { type: slideConfig.transition };
+                slide.transition = { type: slideConfig.transition as pptxgen.SlideTransition["type"] };
               }
 
               // Add master slide footer
@@ -339,7 +397,7 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
                       break;
 
                     case "shape":
-                      const shapeMap = {
+                      const shapeMap: Record<string, pptxgen.ShapeType> = {
                         rect: "rect",
                         roundRect: "roundRect",
                         ellipse: "ellipse",
@@ -347,7 +405,7 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
                         line: "line",
                         arrow: "rightArrow",
                       };
-                      slide.addShape(shapeMap[element.shapeType] || "rect", {
+                      slide.addShape(shapeMap[element.shapeType || "rect"] || "rect", {
                         ...baseOpts,
                         fill: element.fill ? { color: element.fill.replace("#", "") } : undefined,
                         line: element.line ? {
@@ -379,14 +437,14 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
 
                     case "chart":
                       if (element.chartData && element.chartData.length > 0) {
-                        const chartTypeMap = {
+                        const chartTypeMap: Record<string, pptxgen.CHART_NAME> = {
                           bar: pptx.ChartType.bar,
                           line: pptx.ChartType.line,
                           pie: pptx.ChartType.pie,
                           doughnut: pptx.ChartType.doughnut,
                           area: pptx.ChartType.area,
                         };
-                        slide.addChart(chartTypeMap[element.chartType] || pptx.ChartType.bar, element.chartData, {
+                        slide.addChart(chartTypeMap[element.chartType || "bar"] || pptx.ChartType.bar, element.chartData, {
                           ...baseOpts,
                           showTitle: !!element.chartTitle,
                           title: element.chartTitle,
@@ -414,8 +472,9 @@ export function createPowerPointOperationsTool({ workspaceRoot, requestId, emitS
 
         throw new Error(`Unknown operation: ${operation}`);
       } catch (error) {
-        notify("tool_error", { error: error.message });
-        return `Error: ${error.message}`;
+        const err = error as Error;
+        notify("tool_error", { error: err.message });
+        return `Error: ${err.message}`;
       }
     },
     {

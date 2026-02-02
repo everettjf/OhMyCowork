@@ -2,9 +2,15 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
+
+interface CategoryRule {
+  name: string;
+  exts: string[];
+}
 
 // Basic file-type categories for deterministic organization.
-const CATEGORY_RULES = [
+const CATEGORY_RULES: CategoryRule[] = [
   { name: "Images", exts: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".heic", ".ico"] },
   { name: "Video", exts: [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"] },
   { name: "Audio", exts: [".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"] },
@@ -18,25 +24,24 @@ const CATEGORY_RULES = [
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".DS_Store"]);
 
-function resolveWorkspacePath(workspaceRoot, targetPath) {
-  // Ensure the requested path stays inside the workspace root.
-  const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-  const absolute = path.resolve(workspaceRoot, cleaned);
-  const relative = path.relative(workspaceRoot, absolute);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path escapes workspace root.");
-  }
-  return absolute;
+interface MoveRecord {
+  from: string;
+  to: string;
 }
 
-function classifyFile(fileName) {
+interface ErrorRecord {
+  path: string;
+  message: string;
+}
+
+function classifyFile(fileName: string): string {
   if (fileName.startsWith(".")) return "Config";
   const ext = path.extname(fileName).toLowerCase();
   const match = CATEGORY_RULES.find((rule) => rule.exts.includes(ext));
   return match ? match.name : "Other";
 }
 
-async function ensureUniquePath(targetPath) {
+async function ensureUniquePath(targetPath: string): Promise<string> {
   const dir = path.dirname(targetPath);
   const base = path.basename(targetPath, path.extname(targetPath));
   const ext = path.extname(targetPath);
@@ -53,32 +58,34 @@ async function ensureUniquePath(targetPath) {
   }
 }
 
-export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus }) {
-  const notify = (stage, detail) => {
-    if (typeof emitStatus === "function") {
-      emitStatus({ stage, tool: "organize_folder", detail, requestId });
-    }
-  };
+export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
+  const notify = createNotifier("organize_folder", emitStatus, requestId);
 
   return tool(
-    async ({ path: folderPath, includeNested = false }) => {
+    async ({ path: folderPath, includeNested = false }: { path: string; includeNested?: boolean }) => {
       notify("tool_start", { path: folderPath, includeNested });
+
+      if (!workspaceRoot) {
+        throw new Error("workspaceRoot is required");
+      }
+
       const absoluteFolder = resolveWorkspacePath(workspaceRoot, folderPath);
       let entries;
       try {
         entries = await fs.readdir(absoluteFolder, { withFileTypes: true });
       } catch (error) {
-        if (error?.code === "EACCES" || error?.code === "EPERM") {
-          notify("permission_error", { path: folderPath });
+        const err = error as NodeJS.ErrnoException;
+        if (err?.code === "EACCES" || err?.code === "EPERM") {
+          notify("tool_error", { path: folderPath });
         }
         throw error;
       }
 
-      const moved = [];
-      const skipped = [];
-      const errors = [];
+      const moved: MoveRecord[] = [];
+      const skipped: string[] = [];
+      const errors: ErrorRecord[] = [];
 
-      const processEntry = async (entryPath, entryName) => {
+      const processEntry = async (entryPath: string, entryName: string) => {
         const category = classifyFile(entryName);
         const targetDir = path.join(absoluteFolder, category);
         await fs.mkdir(targetDir, { recursive: true });
@@ -87,10 +94,11 @@ export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus 
           await fs.rename(entryPath, destination);
           moved.push({ from: entryPath, to: destination });
         } catch (error) {
-          if (error?.code === "EACCES" || error?.code === "EPERM") {
-            notify("permission_error", { path: entryPath });
+          const err = error as NodeJS.ErrnoException;
+          if (err?.code === "EACCES" || err?.code === "EPERM") {
+            notify("tool_error", { path: entryPath });
           }
-          errors.push({ path: entryPath, message: error?.message || String(error) });
+          errors.push({ path: entryPath, message: err?.message || String(error) });
         }
       };
 
