@@ -2,6 +2,14 @@
 
 Local-first AI coworker for focused work: chat, browse your workspace, and automate tasks safely.
 
+There are already many AI coworker products out there, but I still wanted to build my own version from scratch to match my workflow and ideas.
+I also registered the domain **ohmyco.work** for this project.
+
+## Project Status
+
+OhMyCowork is still in active development.
+Features are evolving quickly, and the project still needs broad, thorough testing before it can be considered production-ready.
+
 ## Features
 
 ### Core Capabilities
@@ -181,6 +189,11 @@ OhMyCowork/
 | `bun run build` | Build frontend |
 | `bun run tauri build` | Build production app |
 | `bun run install:browser` | Install Playwright deps |
+
+### Version Bump
+1. Default patch: `bun run inc`
+2. Minor: `bun run inc:minor`
+3. Major: `bun run inc:major`
 
 ## Dependencies
 

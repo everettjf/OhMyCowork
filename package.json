@@ -6,6 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:dmg": "./build-dmg.sh",
+    "build:pkg:appstore": "./build-pkg-for-appstore.sh",
+    "inc:major": "./inc_version.sh major",
+    "inc:minor": "./inc_version.sh minor",
+    "inc:patch": "./inc_version.sh patch",
+    "inc": "./inc_version.sh",
     "preview": "vite preview",
     "tauri": "tauri",
     "postinstall": "agent-browser install",
