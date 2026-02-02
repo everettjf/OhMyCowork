@@ -1,136 +1,45 @@
 # OhMyCowork
 
-Local-first AI coworker for focused work: chat, browse your workspace, and automate tasks safely.
+A local-first AI coworker desktop app for focused work.
 
-There are already many AI coworker products out there, but I still wanted to build my own version from scratch to match my workflow and ideas.
-I also registered the domain **ohmyco.work** for this project.
+There are already many AI coworker products on the market, but I still wanted to build one myself around my own workflow and product ideas. I also registered **ohmyco.work** for this project.
 
 ## Project Status
 
-OhMyCowork is still in active development.
-Features are evolving quickly, and the project still needs broad, thorough testing before it can be considered production-ready.
+OhMyCowork is **actively under development**.
 
-## Features
+- APIs and UX may change frequently
+- Some modules are still being stabilized
+- The project still needs broader and deeper testing before production use
 
-### Core Capabilities
-- Desktop chat UI with multi-thread conversations
-- Workspace picker + file tree browsing (read-only)
-- Tooling with visible status updates in the chat
+If you find issues, please open an issue or PR.
+
+## What It Does
+
+- Multi-thread desktop chat (Tauri + React)
+- Workspace browsing and file-aware task execution
+- Tool execution with visible status updates
 - Markdown + KaTeX rendering
+- Skills and subagent support
 
-### Automation Tools
+## Tooling Highlights
 
-#### File Management
-- **File Search**: Search files using glob patterns
-- **File Rename**: Batch rename with regex, prefix/suffix, sanitization
-- **Duplicate Finder**: Find and remove duplicate files by hash
-- **Folder Structure**: Create complex folder hierarchies
-- **File Operations**: Copy, move, delete files and folders
-- **Folder Organizer**: Auto-organize files into category folders
-
-#### Office Documents
-- **Excel**: Create, read, analyze spreadsheets, formulas, conditional formatting, CSV conversion, pivot tables
-- **Word**: Create documents, templates, headers/footers, images, Markdown/HTML conversion
-- **PowerPoint**: Create presentations with multiple layouts, charts, images, shapes, transitions
-
-#### PDF Operations
-- Create PDFs with text and images
-- Merge and split PDFs
-- Extract text content
-- Add watermarks and page numbers
-- Rotate pages
-
-#### Media Processing
-- **Images**: Resize, crop, convert, compress, blur, sharpen, watermark, thumbnails
-- **Video**: Trim, merge, compress, convert, subtitles, frame extraction, GIF creation
-
-#### Data Analysis
-- Read and write CSV files
-- Statistical analysis (mean, median, std, percentiles)
-- Correlation matrices
-- Group by aggregations
-- Filter, sort, pivot tables
-- Outlier detection (Z-score, IQR)
-
-#### Archive Operations
-- ZIP compression and extraction
-- TAR/TAR.GZ archives
-- GZIP compression
-
-#### Web Operations
-- HTTP requests (GET, POST, PUT, DELETE)
-- HTML parsing with CSS selectors
-- RSS feed parsing
-- File downloads
-- JSON API interaction
-
-#### Format Conversion
-- Image format conversion
-- Markdown to HTML/DOCX
-- HTML to Markdown
-- JSON/CSV/YAML conversion
-- Base64 encoding/decoding
-
-#### Browser Automation
-- Playwright-based browser control
-- Page navigation, clicks, form filling
-- Screenshots and PDF generation
+- **File management**: search, rename, copy/move/delete, duplicate detection, folder organization
+- **Office**: Excel / Word / PowerPoint generation and manipulation
+- **PDF**: create, merge/split, extract, watermark, paginate
+- **Media**: image transforms + video processing workflows
+- **Data analysis**: CSV operations, stats, pivot/grouping, outlier checks
+- **Archive**: zip/tar/gzip create/extract
+- **Web**: HTTP, parsing, RSS, downloads
+- **Format conversion**: markdown/html/docx, json/csv/yaml, base64
+- **Browser automation**: Playwright-based interaction flows
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Desktop App (Tauri)                     │
-├─────────────────────────────────────────────────────────────┤
-│  Frontend (React + Vite)     │     Backend (Rust)           │
-│  ├── Multi-thread chat UI    │     ├── Tauri plugins        │
-│  ├── Workspace browser       │     ├── Sidecar management   │
-│  ├── Settings management     │     └── IPC handling         │
-│  └── Tool status display     │                               │
-├─────────────────────────────────────────────────────────────┤
-│                    Node.js Sidecar                          │
-│  ├── DeepAgents Framework                                   │
-│  ├── LangChain + OpenRouter                                 │
-│  ├── 25+ Tools                                              │
-│  ├── Subagents                                              │
-│  └── Skills System                                          │
-└─────────────────────────────────────────────────────────────┘
+Frontend (React) -> Tauri IPC -> Rust Backend -> Node.js Sidecar
+                                              -> DeepAgents + Tools + Skills + Subagents
 ```
-
-### Communication Flow
-1. Frontend sends message via Tauri IPC
-2. Rust backend forwards JSON-RPC to sidecar
-3. Sidecar processes with DeepAgents + tools
-4. Status events stream back to UI
-5. Final response returned to frontend
-
-## Tech Stack
-
-**Frontend**
-- React 19.1
-- Vite 7.0
-- TypeScript 5.8
-- Tailwind CSS + Radix UI
-- React Markdown + KaTeX
-
-**Desktop Framework**
-- Tauri 2.0
-- Plugins: dialog, fs, opener, store, shell
-
-**Backend (Rust)**
-- Tauri 2.0
-- Tokio async runtime
-- Serde JSON
-
-**Sidecar (Node.js)**
-- DeepAgents 1.5
-- LangChain OpenAI
-- ExcelJS, docx, pptxgenjs
-- pdf-lib, sharp, fluent-ffmpeg
-- And many more...
-
-**APIs**
-- OpenRouter (LLM routing)
 
 ## Quick Start
 
@@ -138,119 +47,69 @@ Features are evolving quickly, and the project still needs broad, thorough testi
 # Install dependencies
 bun install
 
-# Start development
+# Start app in dev mode
 bun run tauri dev
 ```
 
 ### Browser Automation Setup
-Browser automation dependencies install on `postinstall`. If it fails:
+
+If browser dependencies were not installed automatically:
+
 ```bash
 bun run install:browser
 ```
 
 ## Configuration
 
-Open **Settings** in the app to configure:
+Open **Settings** in the app and configure:
+
 - OpenRouter API key (required)
 - Default model
-
-## Project Structure
-
-```
-OhMyCowork/
-├── src/                    # React frontend
-│   ├── App.tsx            # Main component
-│   ├── components/        # UI components
-│   ├── services/          # Tauri bridge
-│   └── hooks/             # React hooks
-├── src-tauri/             # Rust backend
-│   ├── src/lib.rs         # Tauri setup + IPC
-│   └── tauri.conf.json    # Tauri config
-├── sidecar/               # Node.js agent
-│   ├── agent.ts           # Main agent source
-│   ├── dist/agent.js      # Compiled runtime entry
-│   ├── tools/             # 25+ tool implementations
-│   ├── subagents/         # Specialized agents
-│   └── skills/            # Bundled skills
-└── .deepagents/           # Project skills
-```
-
-## Security
-
-- Workspace access is explicit: only the selected folder is available to tools
-- All file paths are validated to stay within workspace
-- Tool usage is surfaced to the user in the conversation view
 
 ## Scripts
 
 | Command | Description |
-|---------|-------------|
+|---|---|
 | `bun run tauri dev` | Start desktop app in dev mode |
 | `bun run build` | Build frontend |
 | `bun run tauri build` | Build production app |
 | `bun run install:browser` | Install Playwright deps |
+| `bun run build:dmg` | Build DMG package |
+| `bun run build:pkg:appstore` | Build macOS PKG for App Store flow |
 
 ### Version Bump
+
 1. Default patch: `bun run inc`
 2. Minor: `bun run inc:minor`
 3. Major: `bun run inc:major`
 
-## Dependencies
+## Requirements
 
-### System Requirements
-- **FFmpeg**: Required for video operations
-- **Node.js**: v18+ for sidecar
-- **Rust**: For Tauri compilation
+- Node.js 18+
+- Bun
+- Rust toolchain
+- FFmpeg (for video operations)
+- Optional: LibreOffice (for some conversion scenarios)
 
-### Optional
-- **LibreOffice**: For some format conversions
+## Security Model
 
-## Testing Tools
+- Workspace access is explicit and user-selected
+- File operations are constrained to workspace-relative paths
+- Tool usage is surfaced in the UI
 
-Each tool can be tested by asking the AI assistant in the chat:
+## Open Source Notes
 
-### File Management
-```
-"Search for all TypeScript files in the project"
-"Find duplicate files in my Downloads folder"
-"Create a folder structure for a new React project"
-```
+Contributions are welcome. Suggested contributions:
 
-### Office Documents
-```
-"Create an Excel file with sales data and calculate totals"
-"Generate a Word document from this markdown"
-"Create a 5-slide presentation about AI"
-```
-
-### PDF Operations
-```
-"Merge these 3 PDF files into one"
-"Extract text from this PDF"
-"Add page numbers to this document"
-```
-
-### Media Processing
-```
-"Resize all images in /photos to 800px width"
-"Convert this video to GIF"
-"Compress images in the uploads folder"
-```
-
-### Data Analysis
-```
-"Analyze this CSV file and show statistics"
-"Find outliers in the price column"
-"Group sales by region and sum amounts"
-```
-
-### Web Operations
-```
-"Fetch the headlines from this RSS feed"
-"Download this image to my workspace"
-"Parse the links from this webpage"
-```
+- bug reports with reproducible steps
+- test coverage improvements
+- tool reliability/performance fixes
+- docs and UX improvements
 
 ## License
 
 MIT
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=everettjf/OhMyCowork&type=Date)](https://star-history.com/#everettjf/OhMyCowork&Date)
