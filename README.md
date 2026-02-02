@@ -34,6 +34,97 @@ If you find issues, please open an issue or PR.
 - **Format conversion**: markdown/html/docx, json/csv/yaml, base64
 - **Browser automation**: Playwright-based interaction flows
 
+## Full Tools List
+
+### Core Utilities
+
+| Tool | Description | Parameters |
+|---|---|---|
+| `get_time` | Current time in multiple formats | - |
+| `get_timezone` | System timezone info | - |
+| `random_number` | Random integer in range | `min`, `max` |
+| `generate_uuid` | UUID v4 generation | - |
+| `calculate_expression` | Math evaluation | `expression` |
+| `run_node` | Execute Node.js code | `code`, `timeoutMs?` |
+| `agent_browser` | Browser automation | `args[]`, `session?`, `timeoutMs?` |
+
+### File Management
+
+| Tool | Description | Key Parameters |
+|---|---|---|
+| `file_search` | Glob pattern search | `pattern`, `path?`, `ignore?` |
+| `file_rename` | Batch rename | `files[]`, `pattern?`, `replacement?`, `prefix?`, `suffix?` |
+| `find_duplicates` | Find/delete duplicates | `path?`, `deleteAction?`, `minSize?` |
+| `create_folders` | Create folder structure | `structure[]`, `basePath?` |
+| `file_copy_move` | Copy or move files | `operation`, `source`, `destination` |
+| `file_delete` | Delete files | `paths?`, `pattern?`, `dryRun?` |
+| `organize_folder` | Auto-organize by type | `path`, `includeNested?` |
+
+### Office Documents
+
+| Tool | Operations | Key Features |
+|---|---|---|
+| `excel_operations` | create, read, analyze, add_sheet, write_formula, conditional_format, csv_to_excel, excel_to_csv, merge_files, pivot_summary | Formulas, conditional formatting, CSV conversion, pivot tables |
+| `word_operations` | create, read, from_template, to_html, from_markdown, add_header_footer, add_image | Templates, Markdown conversion, headers/footers |
+| `powerpoint_operations` | create, add_slides | Layouts, charts, images, shapes, transitions, themes |
+
+### PDF Operations (`pdf_operations`)
+
+- `create`: Create PDF with text/images
+- `merge`: Combine multiple PDFs
+- `split`: Extract pages
+- `extract_text`: Get text content
+- `add_watermark`: Add text watermark
+- `add_page_numbers`: Insert page numbers
+- `rotate_pages`: Rotate specified pages
+- `get_info`: Document metadata
+- `compress`: Reduce file size
+
+### Media Processing
+
+**`image_operations`**
+- resize, crop, convert, compress, rotate, flip, blur, sharpen, grayscale, watermark, thumbnail, composite, get_info
+
+**`video_operations`**
+- trim, merge, extract_frames, add_subtitle, compress, convert, add_watermark, get_info, extract_audio, resize, gif
+
+### Data Analysis (`data_analysis`)
+
+- read_csv, describe, statistics, correlation, group_by, filter, sort, pivot, outliers, merge_datasets, transform
+
+### Archive Operations (`archive_operations`)
+
+- zip, unzip, tar, untar, gzip, gunzip, list
+
+### Web Operations (`web_operations`)
+
+- http_request, parse_html, extract_links, extract_text, parse_rss, download_file, parse_json_api
+
+### Format Conversion (`format_conversion`)
+
+- image_convert, markdown_to_html, markdown_to_docx, html_to_markdown, json_to_csv, csv_to_json, yaml_to_json, json_to_yaml, text_to_base64, base64_to_text
+
+## Skills List
+
+### Bundled Skills (`sidecar/skills/`)
+
+| ID | Name | Description |
+|---|---|---|
+| `react-best-practices` | React Best Practices | Guidelines for writing performant React and Next.js applications |
+| `web-design-guidelines` | Web Design Guidelines | Comprehensive guidelines for accessible, performant web interfaces |
+| `code-review` | Code Review | Code review guidelines covering security, performance, and best practices |
+| `git-commit-helper` | Git Commit Helper | Generate meaningful commit messages following conventional commits |
+
+### Skill Loading Locations
+
+- Bundled: `sidecar/skills/`
+- Project: `.deepagents/skills/`
+- User: `~/.deepagents/skills/`
+
+### Subagents
+
+- `folder-organizer`: Intelligent folder organization
+
 ## Architecture
 
 ```
