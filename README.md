@@ -127,6 +127,8 @@ If you find issues, please open an issue or PR.
 |---|---|---|
 | `example-skill` | `.deepagents/skills/example-skill/SKILL.md` | Local example template |
 | `skill-creator` | `.deepagents/skills/skill-creator/SKILL.md` | Adapted from OpenClaw, for creating/updating skills |
+| `summarize` | `.deepagents/skills/summarize/SKILL.md` | Adapted from OpenClaw, summary workflow via existing tools |
+| `weather` | `.deepagents/skills/weather/SKILL.md` | Adapted from OpenClaw, weather workflow via Open-Meteo APIs |
 
 ### Subagents
 
