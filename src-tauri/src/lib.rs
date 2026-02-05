@@ -175,18 +175,35 @@ pub fn run() {
             // Handle sidecar output in background
             let app_handle_clone = app_handle.clone();
             tauri::async_runtime::spawn(async move {
+                let mut stdout_buf = String::new();
+                let mut stderr_buf = String::new();
+
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(line_bytes) => {
-                            if let Ok(line) = String::from_utf8(line_bytes) {
-                                for l in line.lines() {
-                                    handle_sidecar_output(&app_handle_clone, l);
+                            if let Ok(chunk) = String::from_utf8(line_bytes) {
+                                stdout_buf.push_str(&chunk);
+                                while let Some(pos) = stdout_buf.find('\n') {
+                                    let mut line = stdout_buf[..pos].to_string();
+                                    stdout_buf = stdout_buf[pos + 1..].to_string();
+                                    if line.ends_with('\r') {
+                                        line.pop();
+                                    }
+                                    handle_sidecar_output(&app_handle_clone, &line);
                                 }
                             }
                         }
                         CommandEvent::Stderr(line_bytes) => {
-                            if let Ok(line) = String::from_utf8(line_bytes) {
-                                eprintln!("[sidecar stderr] {}", line);
+                            if let Ok(chunk) = String::from_utf8(line_bytes) {
+                                stderr_buf.push_str(&chunk);
+                                while let Some(pos) = stderr_buf.find('\n') {
+                                    let mut line = stderr_buf[..pos].to_string();
+                                    stderr_buf = stderr_buf[pos + 1..].to_string();
+                                    if line.ends_with('\r') {
+                                        line.pop();
+                                    }
+                                    eprintln!("[sidecar stderr] {}", line);
+                                }
                             }
                         }
                         CommandEvent::Error(err) => {

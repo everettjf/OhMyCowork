@@ -85,7 +85,7 @@ const AssistantMessage: FC = () => {
       <div className="aui-assistant-message-content">
         <MessagePrimitive.Content
           components={{
-            Text: MessagePart.Text,
+            Text: MessagePart.Markdown,
             tools: { Fallback: ToolCallCard },
             ToolGroup,
             ReasoningGroup,

@@ -417,9 +417,14 @@ No workspace folder is currently selected.
     }))
   }));
 
-  const lastMessage = responseMessages?.[responseMessages.length - 1];
-
-  return formatMessageContent(lastMessage?.content) || "No response from model.";
+  const lastAssistantMessage = [...(responseMessages ?? [])].reverse().find((m) => {
+    const role = m._getType?.() || m.role;
+    return role === "assistant" || role === "ai";
+  });
+  const fallbackMessage = responseMessages?.[responseMessages.length - 1];
+  const finalText = formatMessageContent((lastAssistantMessage ?? fallbackMessage)?.content) || "No response from model.";
+  console.error(`[sidecar stderr] model_response ${JSON.stringify(finalText)}`);
+  return finalText;
 }
 
 interface JsonRpcRequest {

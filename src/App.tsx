@@ -344,7 +344,6 @@ function StudioShell({
               <ThreadList />
             </div>
             <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <div className="text-[11px] text-muted-foreground">Quick</div>
               <div className="flex items-center gap-1">
                 <Button size="icon" variant="ghost" onClick={() => setSkillsOpen(true)}>
                   <Sparkles className="h-4 w-4" />
@@ -509,12 +508,18 @@ function App() {
           };
 
           const signatureForParts = () =>
-            safeStringify({
+            JSON.stringify({
               text: streamedText,
               tools: toolCallOrder.map((id) => {
                 const part = toolCalls.get(id);
                 if (!part) return null;
-                return [part.toolCallId, part.toolName, part.argsText, safeStringify(part.result, 240), part.isError];
+                return [
+                  part.toolCallId,
+                  part.toolName,
+                  part.argsText,
+                  safeStringify(part.result, 240),
+                  part.isError,
+                ];
               }),
             });
 
