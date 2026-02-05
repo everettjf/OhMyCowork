@@ -128,7 +128,7 @@ export function SettingsPanel({
             <label className="text-sm font-medium">Active Provider</label>
             <Select
               value={activeProvider}
-              onValueChange={(value) =>
+              onValueChange={(value: string) =>
                 setDraft((prev) => ({ ...prev, activeProvider: value as ProviderId }))
               }
             >

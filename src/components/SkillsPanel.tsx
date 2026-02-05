@@ -202,7 +202,7 @@ function SkillCard({
       </div>
       <Switch
         checked={skill.enabled}
-        onCheckedChange={(checked) => onToggle(skill.id, checked)}
+        onCheckedChange={(checked: boolean) => onToggle(skill.id, checked)}
         className="shrink-0"
       />
     </div>

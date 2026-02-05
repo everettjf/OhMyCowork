@@ -121,6 +121,17 @@ function emitAgentStatus(payload?: AgentStatusPayload): void {
   );
 }
 
+function emitAssistantDelta(requestId: string | null | undefined, delta: string): void {
+  if (!delta) return;
+  console.log(
+    JSON.stringify({
+      event: "assistant_delta",
+      requestId: requestId ?? null,
+      delta,
+    })
+  );
+}
+
 function resolveBaseUrl(provider?: string, baseUrl?: string): string {
   if (typeof baseUrl === "string" && baseUrl.trim().length > 0) return baseUrl.trim();
   const key = typeof provider === "string" ? provider.toLowerCase() : "openrouter";
@@ -131,14 +142,23 @@ function createChatModel(
   apiKey: string,
   model: string,
   provider?: string,
-  baseUrl?: string
+  baseUrl?: string,
+  requestId?: string | null
 ): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     model,
+    streaming: true,
     configuration: {
       baseURL: resolveBaseUrl(provider, baseUrl),
     },
+    callbacks: [
+      {
+        handleLLMNewToken(token: string) {
+          emitAssistantDelta(requestId, token);
+        },
+      },
+    ],
   });
 }
 
@@ -235,7 +255,7 @@ async function sendMessage(request: SendMessageRequest): Promise<string> {
     ? workspacePath
     : undefined;
 
-  const chatModel = createChatModel(apiKey, model, provider, baseUrl);
+  const chatModel = createChatModel(apiKey, model, provider, baseUrl, requestId ?? null);
 
   const emitStatus: StatusEmitter = (payload) => emitAgentStatus({ ...payload, requestId: payload?.requestId ?? requestId ?? null });
 

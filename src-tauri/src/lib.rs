@@ -114,9 +114,15 @@ fn handle_sidecar_output(app: &tauri::AppHandle, line: &str) {
     }
 
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-        if value.get("event").and_then(|v| v.as_str()) == Some("agent_status") {
-            let _ = app.emit("agent:status", value);
-            return;
+        if let Some(event_name) = value.get("event").and_then(|v| v.as_str()) {
+            if event_name == "agent_status" {
+                let _ = app.emit("agent:status", value);
+                return;
+            }
+            if event_name == "assistant_delta" {
+                let _ = app.emit("agent:delta", value);
+                return;
+            }
         }
     }
 
