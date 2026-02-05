@@ -30,7 +30,7 @@ import {
   Bot,
 } from "lucide-react";
 
-import { sendMessage } from "@/services/agent";
+import { pingSidecar, sendMessage } from "@/services/agent";
 import type { WorkspaceEntry } from "@/types";
 import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -454,6 +454,15 @@ function App() {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  const pingedRef = useRef(false);
+  useEffect(() => {
+    if (pingedRef.current) return;
+    pingedRef.current = true;
+    void pingSidecar().catch(() => {
+      // Best effort warmup; ignore failures.
+    });
+  }, []);
 
   const [workspaceByThreadId, setWorkspaceByThreadId] = useState<Record<string, string>>({});
   const workspaceByThreadIdRef = useRef(workspaceByThreadId);

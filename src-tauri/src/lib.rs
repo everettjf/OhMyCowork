@@ -50,6 +50,43 @@ struct RpcError {
 type PendingRequests = Mutex<HashMap<u64, oneshot::Sender<Result<String, String>>>>;
 
 #[tauri::command]
+async fn ping_sidecar(app: tauri::AppHandle) -> Result<String, String> {
+    let id = REQUEST_ID.fetch_add(1, Ordering::SeqCst);
+
+    let request = serde_json::json!({
+        "id": id,
+        "method": "ping",
+        "params": {}
+    });
+
+    let request_json = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+
+    let (tx, rx) = oneshot::channel();
+    {
+        let pending = app.state::<PendingRequests>();
+        let mut map = pending.lock().unwrap();
+        map.insert(id, tx);
+    }
+
+    let sidecar_stdin = app.state::<Mutex<Option<tauri_plugin_shell::process::CommandChild>>>();
+    {
+        let mut stdin_guard = sidecar_stdin.lock().unwrap();
+        if let Some(ref mut child) = *stdin_guard {
+            let data = (request_json + "\n").into_bytes();
+            child.write(&data).map_err(|e| format!("Failed to write to sidecar: {}", e))?;
+        } else {
+            return Err("Sidecar not running".to_string());
+        }
+    }
+
+    match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(_)) => Err("Request cancelled".to_string()),
+        Err(_) => Err("Request timed out".to_string()),
+    }
+}
+
+#[tauri::command]
 async fn send_message(
     app: tauri::AppHandle,
     provider: Option<String>,
@@ -219,7 +256,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![send_message])
+        .invoke_handler(tauri::generate_handler![send_message, ping_sidecar])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

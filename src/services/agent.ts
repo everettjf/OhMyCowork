@@ -29,3 +29,7 @@ export async function sendMessage(
     requestId,
   });
 }
+
+export async function pingSidecar(): Promise<string> {
+  return invoke<string>("ping_sidecar");
+}
