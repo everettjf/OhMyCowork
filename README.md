@@ -175,6 +175,7 @@ Open **Settings** in the app and configure:
 | `bun run tauri build` | Build production app |
 | `bun run install:browser` | Install Playwright deps |
 | `bun run build:dmg` | Build DMG package |
+| `bun run release:macos` | Build signed release artifacts via `scripts/release-macos.sh` |
 | `bun run build:pkg:appstore` | Build macOS PKG for App Store flow |
 
 ### Version Bump
