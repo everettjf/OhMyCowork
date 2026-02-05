@@ -35,6 +35,7 @@ import type { WorkspaceEntry } from "@/types";
 import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { AssistantMessage } from "@/components/AssistantMessage";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
@@ -86,6 +87,94 @@ const createStreamController = (): StreamController => {
   return { push, close, iterator };
 };
 
+type EventStreamController<T> = {
+  push: (value: T) => void;
+  close: () => void;
+  iterator: AsyncGenerator<T, void>;
+};
+
+const createEventStreamController = <T,>(): EventStreamController<T> => {
+  let done = false;
+  let pendingResolve: ((value: IteratorResult<T, void>) => void) | null = null;
+  const queue: T[] = [];
+
+  const push = (value: T) => {
+    if (pendingResolve) {
+      pendingResolve({ value, done: false });
+      pendingResolve = null;
+      return;
+    }
+    queue.push(value);
+  };
+
+  const close = () => {
+    done = true;
+    if (pendingResolve) {
+      pendingResolve({ value: undefined, done: true });
+      pendingResolve = null;
+    }
+  };
+
+  const iterator = (async function* () {
+    while (true) {
+      if (queue.length > 0) {
+        yield queue.shift() as T;
+        continue;
+      }
+      if (done) return;
+      const next = await new Promise<IteratorResult<T, void>>((resolve) => {
+        pendingResolve = resolve;
+      });
+      if (next.done) return;
+      if (next.value !== undefined) yield next.value;
+    }
+  })();
+
+  return { push, close, iterator };
+};
+
+type ToolStatusPayload = {
+  requestId?: string | null;
+  stage?: string | null;
+  tool?: string | null;
+  detail?: unknown;
+};
+
+type ToolCallPart = {
+  type: "tool-call";
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
+  argsText: string;
+  result?: unknown;
+  isError?: boolean;
+};
+
+const safeStringify = (value: unknown, maxLength = 240) => {
+  try {
+    const text = JSON.stringify(
+      value,
+      (_key, v) => (typeof v === "bigint" ? v.toString() : v),
+      2
+    );
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  } catch {
+    try {
+      const text = String(value ?? "");
+      if (!text) return "";
+      return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+    } catch {
+      return "";
+    }
+  }
+};
+
+const formatToolArgsText = (detail: unknown) => {
+  if (detail == null) return "";
+  if (typeof detail === "string") return detail;
+  return safeStringify(detail, 240);
+};
 
 const extractMessageText = (message: { content?: readonly unknown[] }) => {
   if (!Array.isArray(message.content)) return "";
@@ -273,13 +362,14 @@ function StudioShell({
                   <div className="truncate text-sm font-semibold">
                     {settings.activeProvider} · {settings.providers[settings.activeProvider]?.model || "Not configured"}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">Thread: {activeThreadId}</div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" className="h-8" onClick={() => void handleSelectWorkspace()}>
-                    <FolderOpen className="mr-1 h-3.5 w-3.5" />
-                    {activeWorkspacePath ? "Change Workspace" : "Open Workspace"}
-                  </Button>
+                  {!studioOpen ? (
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => void handleSelectWorkspace()}>
+                      <FolderOpen className="mr-1 h-3.5 w-3.5" />
+                      {activeWorkspacePath ? "Change Workspace" : "Open Workspace"}
+                    </Button>
+                  ) : null}
                   <Button size="icon" variant="ghost" onClick={() => setStudioOpen((prev) => !prev)}>
                     <PanelRight className="h-4 w-4" />
                   </Button>
@@ -295,6 +385,9 @@ function StudioShell({
                       { prompt: "Create a refactor plan based on the current workspace", text: "Refactor Plan" },
                       { prompt: "List the next test checklist items", text: "Test Checklist" },
                     ],
+                  }}
+                  components={{
+                    AssistantMessage,
                   }}
                   strings={{
                     composer: {
@@ -370,6 +463,7 @@ function App() {
   }, [workspaceByThreadId]);
 
   const streamByRequestIdRef = useRef<Record<string, StreamController>>({});
+  const toolStreamByRequestIdRef = useRef<Record<string, EventStreamController<ToolStatusPayload>>>({});
 
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
@@ -393,9 +487,110 @@ function App() {
 
         const streamController = createStreamController();
         streamByRequestIdRef.current[requestId] = streamController;
+        const toolStreamController = createEventStreamController<ToolStatusPayload>();
+        toolStreamByRequestIdRef.current[requestId] = toolStreamController;
 
         return (async function* () {
           let streamedText = "";
+          let lastSignature = "";
+          const toolCalls = new Map<string, ToolCallPart>();
+          const toolCallOrder: string[] = [];
+          const openToolCallsByName = new Map<string, string[]>();
+          let toolCounter = 0;
+
+          const buildContentParts = () => {
+            const parts: Array<{ type: "text"; text: string } | ToolCallPart> = [];
+            if (streamedText) parts.push({ type: "text", text: streamedText });
+            for (const id of toolCallOrder) {
+              const part = toolCalls.get(id);
+              if (part) parts.push(part);
+            }
+            return parts;
+          };
+
+          const signatureForParts = () =>
+            safeStringify({
+              text: streamedText,
+              tools: toolCallOrder.map((id) => {
+                const part = toolCalls.get(id);
+                if (!part) return null;
+                return [part.toolCallId, part.toolName, part.argsText, safeStringify(part.result, 240), part.isError];
+              }),
+            });
+
+          const emitIfChanged = () => {
+            try {
+              const parts = buildContentParts();
+              if (!parts.length) return null;
+              const signature = signatureForParts();
+              if (signature === lastSignature) return null;
+              lastSignature = signature;
+              return { content: parts };
+            } catch {
+              return { content: [{ type: "text", text: streamedText }] };
+            }
+          };
+
+          const createToolCall = (toolName: string, detail: unknown) => {
+            const toolCallId = `${requestId}-tool-${toolCounter++}`;
+            const argsText = formatToolArgsText(detail);
+            const args = argsText ? { detail: argsText } : {};
+            const part: ToolCallPart = {
+              type: "tool-call",
+              toolCallId,
+              toolName,
+              args,
+              argsText,
+            };
+            toolCalls.set(toolCallId, part);
+            toolCallOrder.push(toolCallId);
+            const queue = openToolCallsByName.get(toolName) ?? [];
+            queue.push(toolCallId);
+            openToolCallsByName.set(toolName, queue);
+            return toolCallId;
+          };
+
+          const resolveToolCallId = (toolName: string) => {
+            const queue = openToolCallsByName.get(toolName);
+            if (!queue || queue.length === 0) return null;
+            while (queue.length > 0) {
+              const candidate = queue[queue.length - 1];
+              const part = toolCalls.get(candidate);
+              if (part && part.result === undefined && !part.isError) return candidate;
+              queue.pop();
+            }
+            return null;
+          };
+
+          const handleToolEvent = (payload: ToolStatusPayload) => {
+            try {
+              const toolName = payload.tool ?? null;
+              const stage = payload.stage ?? null;
+              if (!toolName) return emitIfChanged();
+
+              if (stage === "tool_start") {
+                createToolCall(toolName, payload.detail);
+              } else if (stage === "tool_end" || stage === "tool_error") {
+                let toolCallId = resolveToolCallId(toolName);
+                if (!toolCallId) {
+                  toolCallId = createToolCall(toolName, payload.detail);
+                }
+                const part = toolCalls.get(toolCallId);
+                if (part) {
+                  const resultText = formatToolArgsText(payload.detail);
+                  part.result = resultText || (stage === "tool_error" ? "Error" : "Done");
+                  part.isError = stage === "tool_error";
+                }
+              }
+
+              return emitIfChanged();
+            } catch {
+              return emitIfChanged();
+            }
+          };
+
+          let output = "";
+          let sendError: unknown = null;
           const sendPromise = sendMessage(
             {
               provider: current.activeProvider,
@@ -407,26 +602,93 @@ function App() {
             requestId,
             workspaceByThreadIdRef.current[threadId] ?? null
           )
-            .then((output) => output)
-            .finally(() => {
-              streamController.close();
-              delete streamByRequestIdRef.current[requestId];
-            });
+          .then((result) => {
+            output = result;
+            return result;
+          })
+          .catch((err) => {
+            sendError = err;
+            throw err;
+          });
 
-          for await (const delta of streamController.iterator) {
-            if (!delta) continue;
-            streamedText += delta;
-            yield { content: [{ type: "text", text: delta }] };
+          let textDone = false;
+          let toolDone = false;
+          let textNext = streamController.iterator.next().then((res) => ({ source: "text" as const, res }));
+          let toolNext = toolStreamController.iterator.next().then((res) => ({ source: "tool" as const, res }));
+          let sendDone = false;
+          const doneNext = sendPromise
+            .then(() => ({ source: "done" as const }))
+            .catch((err) => ({ source: "error" as const, err }));
+
+          while (!textDone || !toolDone || !sendDone) {
+            const pending = [];
+            if (!textDone) pending.push(textNext);
+            if (!toolDone) pending.push(toolNext);
+            if (!sendDone) pending.push(doneNext);
+            if (!pending.length) break;
+
+            const { source, res } = await Promise.race(pending);
+            if (source === "done") {
+              sendDone = true;
+              textDone = true;
+              toolDone = true;
+              streamController.close();
+              toolStreamController.close();
+            } else if (source === "error") {
+              sendDone = true;
+              textDone = true;
+              toolDone = true;
+              streamController.close();
+              toolStreamController.close();
+              sendError = res?.err ?? sendError;
+            } else if (source === "text") {
+              if (res.done) {
+                textDone = true;
+              } else if (res.value) {
+                streamedText += res.value;
+                const update = emitIfChanged();
+                if (update) yield update;
+              }
+              if (!textDone) {
+                textNext = streamController.iterator.next().then((nextRes) => ({ source: "text" as const, res: nextRes }));
+              }
+            } else {
+              if (res.done) {
+                toolDone = true;
+              } else if (res.value) {
+                const update = handleToolEvent(res.value);
+                if (update) yield update;
+              }
+              if (!toolDone) {
+                toolNext = toolStreamController.iterator.next().then((nextRes) => ({ source: "tool" as const, res: nextRes }));
+              }
+            }
           }
 
-          const output = await sendPromise;
-          if (!streamedText) {
-            yield { content: [{ type: "text", text: output }] };
+          delete streamByRequestIdRef.current[requestId];
+          delete toolStreamByRequestIdRef.current[requestId];
+
+          if (sendError) {
+            const message = sendError instanceof Error ? sendError.message : String(sendError);
+            yield { content: [{ type: "text", text: `Error: ${message}` }] };
+            yield { status: { type: "complete", reason: "error" } };
+            return;
+          }
+          if (!streamedText && output) {
+            streamedText = output;
+            const update = emitIfChanged();
+            if (update) yield update;
           } else if (output && output.startsWith(streamedText)) {
             const remaining = output.slice(streamedText.length);
-            if (remaining) yield { content: [{ type: "text", text: remaining }] };
-          } else if (output) {
-            yield { content: [{ type: "text", text: output }] };
+            if (remaining) {
+              streamedText += remaining;
+              const update = emitIfChanged();
+              if (update) yield update;
+            }
+          } else if (output && output !== streamedText) {
+            streamedText = output;
+            const update = emitIfChanged();
+            if (update) yield update;
           }
 
           yield { status: { type: "complete", reason: "unknown" } };
@@ -454,6 +716,31 @@ function App() {
         const controller = streamByRequestIdRef.current[requestId];
         if (!controller) return;
         controller.push(payload.delta);
+      });
+
+      if (disposed) off();
+      else unlisten = off;
+    };
+
+    void startListening();
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+
+    const startListening = async () => {
+      const off = await listen("agent:status", (event) => {
+        const payload = event.payload as ToolStatusPayload;
+        const requestId = payload.requestId ?? null;
+        if (!requestId) return;
+        const controller = toolStreamByRequestIdRef.current[requestId];
+        if (!controller) return;
+        controller.push(payload);
       });
 
       if (disposed) off();

@@ -7,7 +7,16 @@ if [ ! -d "$SIDECAR_DIR" ]; then
   SIDECAR_DIR="$SCRIPT_DIR/../../../sidecar"
 fi
 cd "$SIDECAR_DIR"
+needs_build=0
 if [ ! -f "dist/agent.js" ]; then
+  needs_build=1
+else
+  if find . -name "*.ts" -newer "dist/agent.js" | grep -q "."; then
+    needs_build=1
+  fi
+fi
+
+if [ "$needs_build" -eq 1 ]; then
   if command -v bun >/dev/null 2>&1; then
     bun run build >/dev/null 2>&1
   else
