@@ -42,11 +42,12 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 
-import type { Thread, Message, WorkspaceEntry } from "@/types";
+import type { Thread, Message, WorkspaceEntry, ToolCall } from "@/types";
 import { sendMessage } from "@/services/agent";
 import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { ToolCallCard } from "@/components/ToolCallCard";
 import { PROVIDER_PRESETS } from "@/lib/providers";
 
 function App() {
@@ -81,13 +82,15 @@ function App() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const messagesScrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const pendingByRequestIdRef = useRef<
     Record<
       string,
       {
         threadId: string;
         messageId: string;
-        tools: string[];
+        toolCalls: ToolCall[];
         permissionNotified: boolean;
       }
     >
@@ -117,8 +120,9 @@ function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
+    let disposed = false;
     const startListening = async () => {
-      unlisten = await listen("agent:status", (event) => {
+      const off = await listen("agent:status", (event) => {
         const payload = event.payload as {
           requestId?: string | null;
           stage?: string | null;
@@ -129,40 +133,74 @@ function App() {
         if (!requestId) return;
         const entry = pendingByRequestIdRef.current[requestId];
         if (!entry) return;
+        const tool = payload.tool ?? "tool";
 
         if (payload.stage === "tool_start") {
-          const tool = payload.tool ?? "tool";
-          const query =
-            typeof payload.detail?.query === "string"
-              ? payload.detail.query
-              : null;
-          const label = query ? `${tool} (query: ${query})` : tool;
-          entry.tools.push(label);
+          entry.toolCalls.push({
+            name: tool,
+            status: "running",
+            args: payload.detail ?? undefined,
+          });
+        } else if (payload.stage === "tool_end") {
+          const runningIndex = [...entry.toolCalls]
+            .map((item, index) => ({ item, index }))
+            .reverse()
+            .find(({ item }) => item.name === tool && item.status === "running")?.index;
+
+          if (runningIndex !== undefined) {
+            entry.toolCalls[runningIndex] = {
+              ...entry.toolCalls[runningIndex],
+              status: "completed",
+              result: payload.detail ? JSON.stringify(payload.detail, null, 2) : undefined,
+            };
+          } else {
+            entry.toolCalls.push({
+              name: tool,
+              status: "completed",
+              result: payload.detail ? JSON.stringify(payload.detail, null, 2) : undefined,
+            });
+          }
         } else if (payload.stage === "tool_error") {
-          const tool = payload.tool ?? "tool";
-          const status =
-            typeof payload.detail?.status === "number"
-              ? ` (error: ${payload.detail.status})`
-              : " (error)";
-          entry.tools.push(`${tool}${status}`);
+          const runningIndex = [...entry.toolCalls]
+            .map((item, index) => ({ item, index }))
+            .reverse()
+            .find(({ item }) => item.name === tool && item.status === "running")?.index;
+
+          if (runningIndex !== undefined) {
+            entry.toolCalls[runningIndex] = {
+              ...entry.toolCalls[runningIndex],
+              status: "error",
+              error: payload.detail ? JSON.stringify(payload.detail, null, 2) : "tool error",
+            };
+          } else {
+            entry.toolCalls.push({
+              name: tool,
+              status: "error",
+              error: payload.detail ? JSON.stringify(payload.detail, null, 2) : "tool error",
+            });
+          }
         }
         if (payload.stage === "permission_error" && !entry.permissionNotified) {
           entry.permissionNotified = true;
           promptWorkspacePermission(entry.threadId);
         }
 
-        const statusText =
-          entry.tools.length > 0
-            ? `Tools:\n${entry.tools.map((item) => `- ${item}`).join("\n")}`
-            : "";
         updateMessage(entry.threadId, entry.messageId, () => ({
-          text: statusText,
+          text: "Working...",
+          toolCalls: [...entry.toolCalls],
         }));
       });
+
+      if (disposed) {
+        off();
+      } else {
+        unlisten = off;
+      }
     };
 
     startListening();
     return () => {
+      disposed = true;
       if (unlisten) {
         unlisten();
       }
@@ -184,6 +222,44 @@ function App() {
 
   const activeMessages = messagesByThread[activeThreadId] ?? [];
   const activeWorkspacePath = activeThread?.workspacePath ?? null;
+
+  const getMessagesViewport = useCallback(() => {
+    const root = messagesScrollAreaRef.current;
+    if (!root) return null;
+    return root.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+  }, []);
+
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const viewport = getMessagesViewport();
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+  }, [getMessagesViewport]);
+
+  useEffect(() => {
+    const viewport = getMessagesViewport();
+    if (!viewport) return;
+
+    const onScroll = () => {
+      const threshold = 24;
+      const distanceToBottom =
+        viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      shouldAutoScrollRef.current = distanceToBottom <= threshold;
+    };
+
+    onScroll();
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", onScroll);
+  }, [activeThreadId, getMessagesViewport]);
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    requestAnimationFrame(() => scrollMessagesToBottom("auto"));
+  }, [activeMessages, scrollMessagesToBottom]);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    requestAnimationFrame(() => scrollMessagesToBottom("auto"));
+  }, [activeThreadId, scrollMessagesToBottom]);
 
   const promptWorkspacePermission = async (threadId: string) => {
     const confirmed = await confirm(
@@ -400,7 +476,7 @@ function App() {
     pendingByRequestIdRef.current[requestId] = {
       threadId: targetThreadId,
       messageId: pendingMessage.id,
-      tools: [],
+      toolCalls: [],
       permissionNotified: false,
     };
 
@@ -608,7 +684,7 @@ function App() {
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col gap-3 bg-gradient-to-b from-background via-background to-muted/30 p-3">
-            <ScrollArea className="min-h-0 flex-1 pr-3">
+            <ScrollArea ref={messagesScrollAreaRef} className="min-h-0 flex-1 pr-3">
               <div className="space-y-3 pb-1">
                 {activeMessages.map((message) => (
                   <div
@@ -701,6 +777,7 @@ function App() {
                           >
                             {message.text}
                           </ReactMarkdown>
+                          <ToolCallCard toolCalls={message.toolCalls ?? []} />
                         </div>
                       ) : (
                         <div className="whitespace-pre-wrap">{message.text}</div>

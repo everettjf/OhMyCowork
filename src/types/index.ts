@@ -11,6 +11,7 @@ export type Message = {
   text: string;
   timestamp: string;
   status?: "pending";
+  toolCalls?: ToolCall[];
 };
 
 export type WorkspaceEntry = {
