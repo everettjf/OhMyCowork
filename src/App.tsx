@@ -11,7 +11,6 @@ import { listen } from "@tauri-apps/api/event";
 import { join } from "@tauri-apps/api/path";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readDir } from "@tauri-apps/plugin-fs";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AssistantRuntimeProvider,
   type ChatModelAdapter,
@@ -28,12 +27,7 @@ import {
   ChevronDown,
   ChevronRight,
   PanelRight,
-  ExternalLink,
   Bot,
-  PenSquare,
-  Code,
-  FilePlus2,
-  Layers,
 } from "lucide-react";
 
 import { sendMessage } from "@/services/agent";
@@ -42,26 +36,8 @@ import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
-
-type CanvasMode = "markdown" | "code";
-
-type CanvasArtifact = {
-  id: string;
-  path: string;
-  language: string;
-  content: string;
-};
-
-type ThreadCanvasState = {
-  mode: CanvasMode;
-  language: string;
-  artifacts: CanvasArtifact[];
-  activeArtifactId: string;
-  newArtifactPath: string;
-};
 
 type StreamController = {
   push: (delta: string) => void;
@@ -110,18 +86,6 @@ const createStreamController = (): StreamController => {
   return { push, close, iterator };
 };
 
-const cloneArtifacts = (artifacts: CanvasArtifact[]) => artifacts.map((item) => ({ ...item }));
-
-const createDefaultCanvasState = (): ThreadCanvasState => {
-  const initialArtifact = { id: makeArtifactId("document.md", 0), path: "document.md", language: "markdown", content: "" };
-  return {
-    mode: "markdown",
-    language: "typescript",
-    artifacts: [initialArtifact],
-    activeArtifactId: initialArtifact.id,
-    newArtifactPath: "src/new-file.ts",
-  };
-};
 
 const extractMessageText = (message: { content?: readonly unknown[] }) => {
   if (!Array.isArray(message.content)) return "";
@@ -134,10 +98,6 @@ const extractMessageText = (message: { content?: readonly unknown[] }) => {
     .join("\n")
     .trim();
 };
-
-const makeArtifactId = (path: string, index: number) => `${path}::${index}::${Date.now()}`;
-
-const sanitizePath = (value: string) => value.trim().replace(/^\/+/, "") || "untitled.txt";
 
 function WorkspaceTree({
   rootPath,
@@ -211,57 +171,14 @@ function StudioShell({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
-  const [studioOpen, setStudioOpen] = useState(true);
-  const [studioTab, setStudioTab] = useState<"canvas" | "workspace">("canvas");
+  const [studioOpen, setStudioOpen] = useState(false);
 
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>("markdown");
-  const [canvasLanguage, setCanvasLanguage] = useState("typescript");
-  const [canvasArtifacts, setCanvasArtifacts] = useState<CanvasArtifact[]>([]);
-  const [activeArtifactId, setActiveArtifactId] = useState("");
-  const [newArtifactPath, setNewArtifactPath] = useState("src/new-file.ts");
-
-  const [canvasStateByThreadId, setCanvasStateByThreadId] = useState<Record<string, ThreadCanvasState>>({});
-  const canvasStateByThreadIdRef = useRef<Record<string, ThreadCanvasState>>({});
-  const previousThreadIdRef = useRef("");
-
   const activeThreadId = useThreadList((t) => t.mainThreadId);
   const activeWorkspacePath = workspaceByThreadId[activeThreadId];
-
-  useEffect(() => {
-    canvasStateByThreadIdRef.current = canvasStateByThreadId;
-  }, [canvasStateByThreadId]);
-
-  useEffect(() => {
-    if (!activeThreadId) return;
-    const previousThreadId = previousThreadIdRef.current;
-    if (previousThreadId) {
-      const snapshot: ThreadCanvasState = {
-        mode: canvasMode,
-        language: canvasLanguage,
-        artifacts: cloneArtifacts(canvasArtifacts),
-        activeArtifactId,
-        newArtifactPath,
-      };
-      setCanvasStateByThreadId((prev) => ({ ...prev, [previousThreadId]: snapshot }));
-    }
-
-    const restored = canvasStateByThreadIdRef.current[activeThreadId] ?? createDefaultCanvasState();
-    setCanvasMode(restored.mode);
-    setCanvasLanguage(restored.language);
-    setCanvasArtifacts(cloneArtifacts(restored.artifacts));
-    setActiveArtifactId(restored.activeArtifactId);
-    setNewArtifactPath(restored.newArtifactPath);
-    previousThreadIdRef.current = activeThreadId;
-  }, [activeThreadId]);
-
-  const activeArtifact = useMemo(
-    () => canvasArtifacts.find((artifact) => artifact.id === activeArtifactId) ?? canvasArtifacts[0] ?? null,
-    [activeArtifactId, canvasArtifacts]
-  );
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
@@ -296,7 +213,6 @@ function StudioShell({
     setWorkspaceByThreadId((prev) => ({ ...prev, [activeThreadId]: selected }));
     setExpandedPaths((prev) => ({ ...prev, [selected]: true }));
     setStudioOpen(true);
-    setStudioTab("workspace");
     await loadDirectory(selected);
   }, [activeThreadId, loadDirectory, setWorkspaceByThreadId]);
 
@@ -308,34 +224,6 @@ function StudioShell({
     },
     [expandedPaths, loadDirectory, workspaceEntries]
   );
-
-  useEffect(() => {
-    if (!activeArtifact && canvasArtifacts.length > 0) {
-      setActiveArtifactId(canvasArtifacts[0].id);
-    }
-  }, [activeArtifact, canvasArtifacts]);
-
-
-
-  const updateActiveArtifact = (updater: (artifact: CanvasArtifact) => CanvasArtifact) => {
-    if (!activeArtifact) return;
-    setCanvasArtifacts((prev) => prev.map((item) => (item.id === activeArtifact.id ? updater(item) : item)));
-  };
-
-
-  const addArtifact = () => {
-    const path = sanitizePath(newArtifactPath);
-    const language = canvasMode === "markdown" ? "markdown" : canvasLanguage || "text";
-    const artifact: CanvasArtifact = {
-      id: makeArtifactId(path, canvasArtifacts.length),
-      path,
-      language,
-      content: "",
-    };
-    setCanvasArtifacts((prev) => [...prev, artifact]);
-    setActiveArtifactId(artifact.id);
-  };
-
 
   const handleSaveSettings = async (nextSettings: typeof settings) => {
     const success = await saveSettings(nextSettings);
@@ -395,16 +283,13 @@ function StudioShell({
                   <Button size="icon" variant="ghost" onClick={() => setStudioOpen((prev) => !prev)}>
                     <PanelRight className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => void openUrl("https://github.com/langchain-ai/open-canvas")}>
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
                 </div>
               </header>
 
               <div className="min-h-0 flex-1 p-2">
                 <Thread
                   welcome={{
-                    message: "Welcome. Talk through ideas, then shape them on Canvas.",
+                    message: "Welcome. Talk through ideas, then shape them into clear output.",
                     suggestions: [
                       { prompt: "Plan a new UI architecture for this repository", text: "UI Architecture Plan" },
                       { prompt: "Create a refactor plan based on the current workspace", text: "Refactor Plan" },
@@ -413,7 +298,7 @@ function StudioShell({
                   }}
                   strings={{
                     composer: {
-                      input: { placeholder: "Type a message, or edit quickly in Canvas on the right..." },
+                      input: { placeholder: "Type a message..." },
                     },
                   }}
                 />
@@ -423,130 +308,37 @@ function StudioShell({
             {studioOpen ? (
               <aside className="flex min-h-0 flex-col bg-[#0d0f14]/95 backdrop-blur-md">
                 <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-                  <div className="text-sm font-semibold">Studio</div>
-                  <div className="flex items-center rounded-md bg-white/10 p-1">
-                    <button
-                      type="button"
-                      className={`rounded px-2 py-1 text-xs ${
-                        studioTab === "canvas" ? "bg-white/15 text-foreground shadow" : "text-muted-foreground"
-                      }`}
-                      onClick={() => setStudioTab("canvas")}
-                    >
-                      Canvas
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded px-2 py-1 text-xs ${
-                        studioTab === "workspace" ? "bg-white/15 text-foreground shadow" : "text-muted-foreground"
-                      }`}
-                      onClick={() => setStudioTab("workspace")}
-                    >
-                      Workspace
-                    </button>
-                  </div>
+                  <div className="text-sm font-semibold">Workspace</div>
+                  <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
+                    {activeWorkspacePath ? "Change" : "Open"}
+                  </Button>
                 </div>
 
-                {studioTab === "canvas" ? (
-                  <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" variant={canvasMode === "markdown" ? "default" : "outline"} onClick={() => setCanvasMode("markdown")}>
-                        <PenSquare className="mr-1 h-3.5 w-3.5" /> Markdown
-                      </Button>
-                      <Button size="sm" variant={canvasMode === "code" ? "default" : "outline"} onClick={() => setCanvasMode("code")}>
-                        <Code className="mr-1 h-3.5 w-3.5" /> Code
-                      </Button>
-                    </div>
+                <div className="flex min-h-0 flex-1 flex-col p-3">
+                  <div className="mb-2 min-w-0">
+                    <div className="text-xs text-muted-foreground">Root</div>
+                    <div className="truncate text-xs text-muted-foreground">{activeWorkspacePath ?? "No workspace selected"}</div>
+                  </div>
 
-                    <div className="rounded-lg border border-white/10 bg-[#11141b] p-2">
-                      <div className="mb-2 flex items-center justify-between text-xs font-medium">
-                        <div className="flex items-center gap-1">
-                          <Layers className="h-3.5 w-3.5" /> Files ({canvasArtifacts.length})
-                        </div>
-                        <Button size="sm" variant="outline" className="h-7" onClick={addArtifact}>
-                          <FilePlus2 className="mr-1 h-3.5 w-3.5" /> Add
-                        </Button>
-                      </div>
+                  {workspaceError ? (
+                    <div className="mb-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-600">{workspaceError}</div>
+                  ) : null}
 
-                      <div className="mb-2 flex gap-2">
-                        <Input
-                          value={newArtifactPath}
-                          onChange={(event) => setNewArtifactPath(event.target.value)}
-                          placeholder="src/new-file.ts"
-                          className="h-8 bg-[#0f131a]"
+                  <div className="min-h-0 flex-1 rounded-lg border border-white/10 bg-[#0f131a] p-2">
+                    <ScrollArea className="h-full">
+                      {activeWorkspacePath ? (
+                        <WorkspaceTree
+                          rootPath={activeWorkspacePath}
+                          workspaceEntries={workspaceEntries}
+                          expandedPaths={expandedPaths}
+                          toggleDirectory={toggleDirectory}
                         />
-                      </div>
-
-                      <select
-                        value={activeArtifact?.id ?? ""}
-                        onChange={(event) => setActiveArtifactId(event.target.value)}
-                        className="h-8 w-full rounded-md border border-white/10 bg-[#0f131a] px-2 text-xs"
-                      >
-                        {canvasArtifacts.map((artifact) => (
-                          <option key={artifact.id} value={artifact.id}>
-                            {artifact.path}
-                          </option>
-                        ))}
-                      </select>
-
-                      {activeArtifact ? (
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          <Input
-                            value={activeArtifact.path}
-                            onChange={(event) =>
-                              updateActiveArtifact((item) => ({ ...item, path: sanitizePath(event.target.value) }))
-                            }
-                            className="h-8 bg-[#0f131a] text-xs"
-                          />
-                          <Input
-                            value={activeArtifact.language}
-                            onChange={(event) => updateActiveArtifact((item) => ({ ...item, language: event.target.value }))}
-                            className="h-8 bg-[#0f131a] text-xs"
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <textarea
-                      value={activeArtifact?.content ?? ""}
-                      onChange={(event) => updateActiveArtifact((item) => ({ ...item, content: event.target.value }))}
-                      placeholder={canvasMode === "markdown" ? "Write your document here" : "Write your code here"}
-                      className="min-h-[160px] w-full flex-1 resize-none rounded-md border border-white/10 bg-[#0f131a] p-3 font-mono text-sm outline-none focus:border-white/30"
-                    />
-
+                      ) : (
+                        <div className="text-xs text-muted-foreground">File tree appears after opening a workspace.</div>
+                      )}
+                    </ScrollArea>
                   </div>
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col p-3">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">Workspace</div>
-                        <div className="truncate text-xs text-muted-foreground">{activeWorkspacePath ?? "No workspace selected"}</div>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
-                        {activeWorkspacePath ? "Change" : "Open"}
-                      </Button>
-                    </div>
-
-                    {workspaceError ? (
-                      <div className="mb-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-600">{workspaceError}</div>
-                    ) : null}
-
-                    <div className="min-h-0 flex-1 rounded-lg border border-white/10 bg-[#0f131a] p-2">
-                      <ScrollArea className="h-full">
-                        {activeWorkspacePath ? (
-                          <WorkspaceTree
-                            rootPath={activeWorkspacePath}
-                            workspaceEntries={workspaceEntries}
-                            expandedPaths={expandedPaths}
-                            toggleDirectory={toggleDirectory}
-                          />
-                        ) : (
-                          <div className="text-xs text-muted-foreground">File tree appears after opening a workspace.</div>
-                        )}
-                      </ScrollArea>
-                    </div>
-                  </div>
-                )}
-
+                </div>
               </aside>
             ) : null}
         </div>
