@@ -1,6 +1,6 @@
 import type { FC, PropsWithChildren } from "react";
 import { MessagePrimitive, type ToolCallMessagePartProps } from "@assistant-ui/react";
-import { AssistantActionBar, BranchPicker, MessagePart } from "@assistant-ui/react-ui";
+import { AssistantActionBar, BranchPicker, MessagePart, makeMarkdownText } from "@assistant-ui/react-ui";
 
 const ToolGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>> = ({
   children,
@@ -75,6 +75,8 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
   );
 };
 
+const MarkdownText = makeMarkdownText({ className: "markdown" });
+
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root className="aui-assistant-message-root">
@@ -85,7 +87,7 @@ const AssistantMessage: FC = () => {
       <div className="aui-assistant-message-content">
         <MessagePrimitive.Content
           components={{
-            Text: MessagePart.Markdown,
+            Text: MarkdownText,
             tools: { Fallback: ToolCallCard },
             ToolGroup,
             ReasoningGroup,
