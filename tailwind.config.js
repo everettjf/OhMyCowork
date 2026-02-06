@@ -50,6 +50,12 @@ export default {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			},
+  			panel: {
+  				base: 'rgb(var(--panel-base) / <alpha-value>)',
+  				deep: 'rgb(var(--panel-deep) / <alpha-value>)',
+  				card: 'rgb(var(--panel-card) / <alpha-value>)',
+  				inset: 'rgb(var(--panel-inset) / <alpha-value>)',
+  			},
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',

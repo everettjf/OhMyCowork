@@ -323,8 +323,8 @@ function StudioShell({
 
   return (
     <>
-      <div className="relative h-svh overflow-hidden bg-[radial-gradient(circle_at_10%_10%,rgba(60,86,130,0.35),transparent_45%),radial-gradient(circle_at_90%_0%,rgba(120,72,35,0.25),transparent_40%),linear-gradient(160deg,#0b0b0f_0%,#10131a_55%,#0a0c11_100%)]">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
+      <div className="relative h-svh overflow-hidden bg-[image:var(--app-gradient)]">
+        <div className="absolute inset-0 app-grid-overlay" />
 
         <div
           className={`relative grid h-full w-full grid-cols-1 ${
@@ -333,7 +333,7 @@ function StudioShell({
               : "lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]"
           }`}
         >
-          <aside className="flex min-h-0 flex-col border-r border-white/10 bg-[#0f1117]/80 p-3 backdrop-blur-md">
+          <aside className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-panel-base/80 p-3 backdrop-blur-md">
             <div className="mb-3 flex items-center gap-2">
               <Bot className="h-5 w-5 text-orange-600" />
               <div>
@@ -344,7 +344,7 @@ function StudioShell({
             <div className="min-h-0 flex-1">
               <ThreadList />
             </div>
-            <div className="mt-3 border-t border-white/10 pt-3">
+            <div className="mt-3 border-t border-[var(--surface-border)] pt-3">
               <div className="flex flex-col gap-2">
                 <Button variant="outline" className="h-9 justify-start gap-2" onClick={() => setSkillsOpen(true)}>
                   <Sparkles className="h-4 w-4" />
@@ -358,8 +358,8 @@ function StudioShell({
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col border-r border-white/10 bg-[#0f1117]/85 backdrop-blur-md">
-              <header className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
+          <section className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-panel-base/85 backdrop-blur-md">
+              <header className="flex items-center justify-between gap-2 border-b border-[var(--surface-border)] px-3 py-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">
                     {settings.activeProvider} · {settings.providers[settings.activeProvider]?.model || "Not configured"}
@@ -402,8 +402,8 @@ function StudioShell({
           </section>
 
             {studioOpen ? (
-              <aside className="flex min-h-0 flex-col bg-[#0d0f14]/95 backdrop-blur-md">
-                <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+              <aside className="flex min-h-0 flex-col bg-panel-deep/95 backdrop-blur-md">
+                <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-3 py-2">
                   <div className="text-sm font-semibold">Workspace</div>
                   <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
                     {activeWorkspacePath ? "Change" : "Open"}
@@ -420,7 +420,7 @@ function StudioShell({
                     <div className="mb-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-600">{workspaceError}</div>
                   ) : null}
 
-                  <div className="min-h-0 flex-1 rounded-lg border border-white/10 bg-[#0f131a] p-2">
+                  <div className="min-h-0 flex-1 rounded-lg border border-[var(--surface-border)] bg-panel-inset p-2">
                     <ScrollArea className="h-full">
                       {activeWorkspacePath ? (
                         <WorkspaceTree

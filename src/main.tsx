@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { ThemeProvider } from "@/hooks/useTheme";
 import "katex/dist/katex.min.css";
 import "./index.css";
 
@@ -8,10 +9,10 @@ import "./index.css";
   env: {},
 };
 
-document.documentElement.classList.add("dark");
-
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider defaultTheme="dark">
+      <App />
+    </ThemeProvider>
   </React.StrictMode>,
 );

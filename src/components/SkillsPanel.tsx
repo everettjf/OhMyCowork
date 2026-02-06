@@ -181,7 +181,7 @@ const MANAGED_SKILLS: Skill[] = [
   },
 ];
 
-function SkillCard({
+function SkillRow({
   skill,
   onToggle,
 }: {
@@ -192,29 +192,23 @@ function SkillCard({
   const classes = colorClasses[color];
 
   return (
-    <div
-      className={`group flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 transition-all ${classes.border} ${
-        !skill.enabled ? "opacity-50" : ""
-      }`}
-    >
+    <div className="flex items-center gap-3 border-b border-[var(--surface-border-subtle)] px-1 py-3 last:border-b-0">
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${classes.bg} ${classes.text}`}
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${classes.bg} ${classes.text}`}
       >
         {categoryIcons[skill.id] || categoryIcons.default}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h4 className="truncate text-sm font-medium">{skill.name}</h4>
-          <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">
-            v{skill.version}
-          </span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">v{skill.version}</span>
+          <span className="shrink-0 text-[10px] text-muted-foreground/50">by {skill.author}</span>
         </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {skill.description}
         </p>
-        <p className="mt-1.5 text-[10px] text-muted-foreground/60">by {skill.author}</p>
       </div>
-      <div className="shrink-0 pt-0.5">
+      <div className="shrink-0">
         <Switch
           checked={skill.enabled}
           onCheckedChange={(checked: boolean) =>
@@ -232,10 +226,10 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
         {label}
       </h3>
-      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white/[0.06] px-1.5 text-[10px] font-medium text-muted-foreground">
+      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-active)] px-1.5 text-[10px] font-medium text-muted-foreground">
         {count}
       </span>
-      <div className="h-px flex-1 bg-gradient-to-r from-white/[0.06] to-transparent" />
+      <div className="h-px flex-1 bg-gradient-to-r from-[var(--surface-divider)] to-transparent" />
     </div>
   );
 }
@@ -287,11 +281,9 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="relative max-h-[85vh] max-w-4xl overflow-hidden rounded-2xl border-white/[0.08] bg-[radial-gradient(circle_at_10%_10%,rgba(60,86,130,0.35),transparent_45%),radial-gradient(circle_at_90%_0%,rgba(120,72,35,0.25),transparent_40%),linear-gradient(160deg,#0b0b0f_0%,#10131a_55%,#0a0c11_100%)] p-0">
-        {/* Grid overlay */}
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
+      <DialogContent className="flex h-[85vh] max-w-4xl flex-col overflow-hidden rounded-2xl border-[var(--surface-border-subtle)] bg-panel-base p-0">
 
-        <div className="relative flex h-full flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {/* Header */}
           <DialogHeader className="shrink-0 px-6 pb-4 pt-6">
             <div className="flex items-start justify-between gap-4">
@@ -310,11 +302,11 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
                   placeholder="Search skills..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-60 border-white/[0.06] bg-white/[0.03] pl-9 text-sm placeholder:text-muted-foreground/50 focus:border-white/20 focus:ring-1 focus:ring-white/10"
+                  className="h-9 w-60 border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] pl-9 text-sm placeholder:text-muted-foreground/50 focus:border-[var(--surface-border)] focus:ring-1 focus:ring-[var(--surface-border)]"
                 />
               </div>
             </div>
-            <div className="mt-4 h-px bg-gradient-to-r from-white/[0.08] via-white/[0.04] to-transparent" />
+            <div className="mt-4 h-px bg-gradient-to-r from-[var(--surface-divider)] via-[var(--surface-elevated)] to-transparent" />
           </DialogHeader>
 
           {/* Content */}
@@ -322,7 +314,7 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
             <ScrollArea className="h-full pr-3">
               {totalFiltered === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.04]">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-hover)]">
                     <Search className="h-5 w-5 text-muted-foreground/50" />
                   </div>
                   <p className="text-sm text-muted-foreground">No skills match your search.</p>
@@ -334,9 +326,9 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
                   {filteredBundled.length > 0 && (
                     <div>
                       <SectionHeader label="Bundled Skills" count={filteredBundled.length} />
-                      <div className="grid gap-2.5 md:grid-cols-2">
+                      <div>
                         {filteredBundled.map((skill) => (
-                          <SkillCard key={skill.id} skill={skill} onToggle={handleToggle} />
+                          <SkillRow key={skill.id} skill={skill} onToggle={handleToggle} />
                         ))}
                       </div>
                     </div>
@@ -346,9 +338,9 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
                   {filteredManaged.length > 0 && (
                     <div>
                       <SectionHeader label="Community Skills" count={filteredManaged.length} />
-                      <div className="grid gap-2.5 md:grid-cols-2">
+                      <div>
                         {filteredManaged.map((skill) => (
-                          <SkillCard key={skill.id} skill={skill} onToggle={handleToggle} />
+                          <SkillRow key={skill.id} skill={skill} onToggle={handleToggle} />
                         ))}
                       </div>
                     </div>
@@ -358,9 +350,9 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
                   {filteredWorkspace.length > 0 && (
                     <div>
                       <SectionHeader label="Workspace Skills" count={filteredWorkspace.length} />
-                      <div className="grid gap-2.5 md:grid-cols-2">
+                      <div>
                         {filteredWorkspace.map((skill) => (
-                          <SkillCard key={skill.id} skill={skill} onToggle={handleToggle} />
+                          <SkillRow key={skill.id} skill={skill} onToggle={handleToggle} />
                         ))}
                       </div>
                     </div>
@@ -369,8 +361,8 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
               )}
 
               {workspacePath ? null : (
-                <div className="mt-6 flex items-center gap-3 rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] p-4">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
+                <div className="mt-6 flex items-center gap-3 rounded-xl border border-dashed border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--surface-hover)]">
                     <FolderOpen className="h-4 w-4 text-muted-foreground/50" />
                   </div>
                   <div>

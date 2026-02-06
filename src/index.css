@@ -42,7 +42,30 @@
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%}
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --app-gradient: radial-gradient(circle at 10% 10%, rgba(100, 130, 180, 0.12), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(160, 120, 80, 0.08), transparent 40%),
+      linear-gradient(160deg, #f8fafc 0%, #f1f5f9 55%, #f8fafc 100%);
+    --app-grid-line: rgba(0, 0, 0, 0.04);
+
+    --panel-base: 248 250 252;
+    --panel-deep: 241 245 249;
+    --panel-card: 255 255 255;
+    --panel-inset: 241 245 249;
+
+    --surface-border: rgba(0, 0, 0, 0.08);
+    --surface-border-subtle: rgba(0, 0, 0, 0.05);
+    --surface-hover: rgba(0, 0, 0, 0.04);
+    --surface-active: rgba(0, 0, 0, 0.06);
+    --surface-elevated: rgba(0, 0, 0, 0.02);
+    --surface-divider: rgba(0, 0, 0, 0.06);
+
+    --overlay-light: rgba(0, 0, 0, 0.05);
+    --overlay-medium: rgba(0, 0, 0, 0.08);
+    --overlay-backdrop: rgba(0, 0, 0, 0.30);
+    --overlay-heavy: rgba(0, 0, 0, 0.50);
+  }
   .dark {
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
@@ -76,45 +99,32 @@
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%}
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 72%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 22%;
-    --input: 0 0% 22%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --app-gradient: radial-gradient(circle at 10% 10%, rgba(60, 86, 130, 0.35), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(120, 72, 35, 0.25), transparent 40%),
+      linear-gradient(160deg, #0b0b0f 0%, #10131a 55%, #0a0c11 100%);
+    --app-grid-line: rgba(255, 255, 255, 0.04);
+
+    --panel-base: 15 17 23;
+    --panel-deep: 13 15 20;
+    --panel-card: 11 13 18;
+    --panel-inset: 15 19 26;
+
+    --surface-border: rgba(255, 255, 255, 0.10);
+    --surface-border-subtle: rgba(255, 255, 255, 0.06);
+    --surface-hover: rgba(255, 255, 255, 0.04);
+    --surface-active: rgba(255, 255, 255, 0.06);
+    --surface-elevated: rgba(255, 255, 255, 0.02);
+    --surface-divider: rgba(255, 255, 255, 0.08);
+
+    --overlay-light: rgba(0, 0, 0, 0.30);
+    --overlay-medium: rgba(0, 0, 0, 0.40);
+    --overlay-backdrop: rgba(0, 0, 0, 0.50);
+    --overlay-heavy: rgba(0, 0, 0, 0.80);
   }
 }
+
 
 @layer base {
   * {
@@ -168,5 +178,11 @@
   }
   .markdown table th {
     @apply bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground;
+  }
+
+  .app-grid-overlay {
+    background-image: linear-gradient(to right, var(--app-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--app-grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }

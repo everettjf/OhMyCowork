@@ -60,21 +60,21 @@ const WebOpCard: FC<{
   const text = typeof result?.text === "string" ? (result?.text as string) : null;
 
   return (
-    <div className="rounded-md border border-white/10 bg-[#0b0d12] px-3 py-2 text-xs">
+    <div className="rounded-md border border-[var(--surface-border)] bg-panel-card px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-        <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px]">
+        <span className="rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[10px]">
           {operation || "web"}
         </span>
         {url ? <span className="truncate">{url}</span> : null}
         {status ? (
-          <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px]">
+          <span className="rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[10px]">
             {status} {statusText ?? ""}
           </span>
         ) : null}
       </div>
 
       {links ? (
-        <div className="mt-2 rounded-md border border-white/5 bg-black/30 p-2">
+        <div className="mt-2 rounded-md border border-[var(--surface-border-subtle)] bg-[var(--overlay-light)] p-2">
           <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Links</div>
           <div className="max-h-44 overflow-auto">
             <div className="grid grid-cols-[1fr_2fr] gap-2 text-[11px] text-muted-foreground">
@@ -92,11 +92,11 @@ const WebOpCard: FC<{
       ) : null}
 
       {items ? (
-        <div className="mt-2 rounded-md border border-white/5 bg-black/30 p-2">
+        <div className="mt-2 rounded-md border border-[var(--surface-border-subtle)] bg-[var(--overlay-light)] p-2">
           <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Items</div>
           <div className="space-y-2 text-[11px] text-muted-foreground">
             {items.slice(0, 5).map((item, i) => (
-              <div key={`${item?.link ?? "item"}-${i}`} className="rounded-md border border-white/5 p-2">
+              <div key={`${item?.link ?? "item"}-${i}`} className="rounded-md border border-[var(--surface-border-subtle)] p-2">
                 <div className="truncate text-foreground/80">{item?.title || "Untitled"}</div>
                 {item?.link ? <div className="truncate">{item.link}</div> : null}
                 {item?.pubDate ? <div className="text-muted-foreground/70">{item.pubDate}</div> : null}
@@ -107,7 +107,7 @@ const WebOpCard: FC<{
       ) : null}
 
       {text ? (
-        <div className="mt-2 rounded-md border border-white/5 bg-black/30 p-2">
+        <div className="mt-2 rounded-md border border-[var(--surface-border-subtle)] bg-[var(--overlay-light)] p-2">
           <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Excerpt</div>
           <div className="line-clamp-4 text-[11px] text-muted-foreground">
             {text.slice(0, 600)}
@@ -125,12 +125,12 @@ const FileSearchCard: FC<{
   const total = typeof result?.total === "number" ? (result?.total as number) : files.length;
 
   return (
-    <div className="rounded-md border border-white/10 bg-[#0b0d12] px-3 py-2 text-xs">
+    <div className="rounded-md border border-[var(--surface-border)] bg-panel-card px-3 py-2 text-xs">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>file_search</span>
         <span>{files.length} shown / {total} total</span>
       </div>
-      <div className="mt-2 max-h-48 overflow-auto rounded-md border border-white/5 bg-black/30 p-2">
+      <div className="mt-2 max-h-48 overflow-auto rounded-md border border-[var(--surface-border-subtle)] bg-[var(--overlay-light)] p-2">
         <div className="grid grid-cols-[2fr_80px_140px] gap-2 text-[11px] text-muted-foreground">
           <div className="text-muted-foreground/70">Path</div>
           <div className="text-muted-foreground/70">Size</div>
@@ -155,10 +155,10 @@ const SkillTraceCard: FC<{ result: ToolResultJson | null }> = ({ result }) => {
   const size = typeof result.size === "number" ? result.size : undefined;
 
   return (
-    <div className="rounded-md border border-white/10 bg-[#0b0d12] px-3 py-2 text-xs">
+    <div className="rounded-md border border-[var(--surface-border)] bg-panel-card px-3 py-2 text-xs">
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>skills</span>
-        {action ? <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px]">{action}</span> : null}
+        {action ? <span className="rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[10px]">{action}</span> : null}
       </div>
       <div className="mt-2 text-[11px] text-muted-foreground">
         {path ? <div className="truncate">{path}</div> : null}
@@ -175,7 +175,7 @@ const ToolGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>>
 }) => {
   const count = endIndex - startIndex + 1;
   return (
-    <details className="my-3 rounded-lg border border-white/10 bg-[#0f131a] px-3 py-2">
+    <details className="my-3 rounded-lg border border-[var(--surface-border)] bg-panel-inset px-3 py-2">
       <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
         Tool calls • {count}
       </summary>
@@ -186,7 +186,7 @@ const ToolGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>>
 
 const ReasoningGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>> = ({ children }) => {
   return (
-    <details className="my-3 rounded-lg border border-dashed border-white/10 bg-[#0f1117] px-3 py-2">
+    <details className="my-3 rounded-lg border border-dashed border-[var(--surface-border)] bg-panel-base px-3 py-2">
       <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
         Reasoning (summarized)
       </summary>
@@ -251,7 +251,7 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
 
   return (
     <details
-      className="rounded-md border border-white/10 bg-[#0b0d12] px-3 py-2 text-xs"
+      className="rounded-md border border-[var(--surface-border)] bg-panel-card px-3 py-2 text-xs"
       open={status?.type === "running" || isError}
     >
       <summary className="flex cursor-pointer items-center justify-between gap-3 text-[11px] text-muted-foreground">
@@ -259,7 +259,7 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
           <span className="truncate font-medium text-foreground/80">{toolName}</span>
           {summary ? <span className="truncate text-muted-foreground/80">{summary}</span> : null}
         </div>
-        <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px]">
+        <span className="shrink-0 rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[10px]">
           {statusLabel}
         </span>
       </summary>
@@ -270,7 +270,7 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
             <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
               Input
             </div>
-            <pre className="whitespace-pre-wrap rounded-md bg-black/40 p-2 text-[11px] text-muted-foreground">
+            <pre className="whitespace-pre-wrap rounded-md bg-[var(--overlay-medium)] p-2 text-[11px] text-muted-foreground">
               {argsText}
             </pre>
           </div>
@@ -280,7 +280,7 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
             <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
               {isError ? "Error" : "Output"}
             </div>
-            <pre className="whitespace-pre-wrap rounded-md bg-black/30 p-2 text-[11px] text-muted-foreground">
+            <pre className="whitespace-pre-wrap rounded-md bg-[var(--overlay-light)] p-2 text-[11px] text-muted-foreground">
               {renderedResult}
             </pre>
           </div>

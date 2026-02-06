@@ -23,15 +23,15 @@ import {
   Link2,
   Settings,
   SlidersHorizontal,
-  Palette,
-  Server,
-  GitBranch,
-  Box,
-  GitFork,
   Archive,
+  Sun,
+  Moon,
+  Monitor,
+  Info,
 } from "lucide-react";
 import { ProviderId, ProviderPreset, PROVIDER_PRESETS } from "@/lib/providers";
 import type { Settings as SettingsType } from "@/hooks/useSettings";
+import { useTheme } from "@/hooks/useTheme";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -43,13 +43,9 @@ interface SettingsPanelProps {
 
 const navIcons: Record<string, React.ReactNode> = {
   General: <Settings className="h-4 w-4" />,
-  Configuration: <SlidersHorizontal className="h-4 w-4" />,
-  Personalization: <Palette className="h-4 w-4" />,
-  "MCP servers": <Server className="h-4 w-4" />,
-  Git: <GitBranch className="h-4 w-4" />,
-  Environments: <Box className="h-4 w-4" />,
-  Worktrees: <GitFork className="h-4 w-4" />,
-  "Archived threads": <Archive className="h-4 w-4" />,
+  Models: <SlidersHorizontal className="h-4 w-4" />,
+  Memory: <Archive className="h-4 w-4" />,
+  About: <Info className="h-4 w-4" />,
 };
 
 export function SettingsPanel({
@@ -62,6 +58,8 @@ export function SettingsPanel({
   const [draft, setDraft] = useState<SettingsType>(settings);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeNav, setActiveNav] = useState("General");
+  const { theme, setTheme, resolvedTheme } = useTheme();
 
   useEffect(() => {
     if (open) {
@@ -84,16 +82,10 @@ export function SettingsPanel({
 
   const navItems = [
     "General",
-    "Configuration",
-    "Personalization",
-    "MCP servers",
-    "Git",
-    "Environments",
-    "Worktrees",
-    "Archived threads",
+    "Models",
+    "Memory",
+    "About",
   ];
-  const activeNav = "Configuration";
-
   const updateProviderField = (providerId: ProviderId, field: "apiKey" | "model" | "baseUrl", value: string) => {
     setDraft((prev) => ({
       ...prev,
@@ -148,182 +140,284 @@ export function SettingsPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="relative max-h-[85vh] max-w-4xl overflow-hidden rounded-2xl border-white/[0.08] bg-[radial-gradient(circle_at_10%_10%,rgba(60,86,130,0.35),transparent_45%),radial-gradient(circle_at_90%_0%,rgba(120,72,35,0.25),transparent_40%),linear-gradient(160deg,#0b0b0f_0%,#10131a_55%,#0a0c11_100%)] p-0">
-        {/* Grid overlay */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
+      <DialogContent className="flex h-[85vh] max-w-4xl flex-col overflow-hidden rounded-2xl border-[var(--surface-border-subtle)] bg-panel-base p-0">
 
-        <div className="relative flex h-full">
+        <div className="relative flex min-h-0 flex-1">
           {/* Sidebar */}
-          <aside className="w-60 shrink-0 border-r border-white/[0.06] p-5">
+          <aside className="w-60 shrink-0 border-r border-[var(--surface-border-subtle)] p-5">
             <div className="mb-5">
               <h2 className="text-sm font-semibold text-foreground">Settings</h2>
               <p className="mt-0.5 text-[11px] text-muted-foreground/50">Manage your preferences</p>
             </div>
             <nav className="space-y-0.5">
               {navItems.map((item) => (
-                <div
+                <button
+                  type="button"
                   key={item}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  onClick={() => setActiveNav(item)}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                     item === activeNav
-                      ? "border-l-2 border-l-blue-400 bg-white/[0.06] pl-[10px] font-medium text-foreground"
-                      : "text-muted-foreground/70 hover:bg-white/[0.03] hover:text-foreground"
+                      ? "border-l-2 border-l-blue-400 bg-[var(--surface-active)] pl-[10px] font-medium text-foreground"
+                      : "text-muted-foreground/70 hover:bg-[var(--surface-hover)] hover:text-foreground"
                   }`}
                 >
                   <span className={item === activeNav ? "text-blue-400" : ""}>{navIcons[item]}</span>
                   {item}
-                </div>
+                </button>
               ))}
             </nav>
           </aside>
 
           {/* Main content */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 px-6 pb-4 pt-6">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2.5 text-xl font-semibold">
-                  <SlidersHorizontal className="h-5 w-5 text-blue-400" />
-                  Configuration
-                </DialogTitle>
-                <DialogDescription className="mt-1.5 text-sm text-muted-foreground">
-                  Configure API keys, models, and base URLs.
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px]">
-                    {configuredCount}/{providers.length} configured
-                  </span>
-                </DialogDescription>
-              </DialogHeader>
-              <div className="mt-4 h-px bg-gradient-to-r from-white/[0.08] via-white/[0.04] to-transparent" />
-            </div>
-
-            <div className="flex-1 overflow-auto px-6 pb-6">
-              {/* Provider selector card */}
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
-                <div className="mb-4">
-                  <div className="text-sm font-medium">Active Provider</div>
-                  <p className="mt-0.5 text-xs text-muted-foreground/50">Select which LLM provider to use</p>
+            {activeNav === "General" ? (
+              <>
+                <div className="shrink-0 px-6 pb-4 pt-6">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2.5 text-xl font-semibold">
+                      <Settings className="h-5 w-5 text-blue-400" />
+                      General
+                    </DialogTitle>
+                    <DialogDescription className="mt-1.5 text-sm text-muted-foreground">
+                      General application preferences
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 h-px bg-gradient-to-r from-[var(--surface-divider)] via-[var(--surface-elevated)] to-transparent" />
                 </div>
-                <Select
-                  value={activeProvider}
-                  onValueChange={(value: string) =>
-                    setDraft((prev) => ({ ...prev, activeProvider: value as ProviderId }))
-                  }
-                >
-                  <SelectTrigger className="border-white/[0.06] bg-white/[0.03] focus:ring-1 focus:ring-white/10">
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providers.map((provider) => {
-                      const hasKey = (draft.providers[provider.id]?.apiKey || "").trim().length > 0;
-                      return (
-                        <SelectItem key={provider.id} value={provider.id}>
-                          <div className="flex items-center gap-2">
-                            <span>{provider.name}</span>
-                            {hasKey ? (
-                              <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">Configured</span>
-                            ) : (
-                              <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-muted-foreground/50">No Key</span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
 
-                {/* Provider info */}
-                <div className="mt-4 rounded-lg border border-white/[0.04] bg-white/[0.02] p-3 text-xs leading-relaxed text-muted-foreground/60">
-                  <p>Default provider is OpenRouter. You can switch providers anytime.</p>
-                  <p className="mt-1">Each provider keeps its own API key, model, and base URL.</p>
-                </div>
-              </div>
-
-              {/* Config fields card */}
-              <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">{activePreset?.name ?? "Provider"} Config</div>
-                    <p className="mt-0.5 text-xs text-muted-foreground/50">API key, model, and endpoint</p>
+                <div className="flex-1 overflow-auto px-6 pb-6">
+                  {/* Appearance card */}
+                  <div className="rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="mb-4">
+                      <div className="text-sm font-medium">Appearance</div>
+                      <p className="mt-0.5 text-xs text-muted-foreground/50">Choose your preferred color theme</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {([
+                        { value: "light" as const, label: "Light", icon: Sun },
+                        { value: "dark" as const, label: "Dark", icon: Moon },
+                        { value: "system" as const, label: "System", icon: Monitor },
+                      ]).map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setTheme(value)}
+                          className={`flex flex-col items-center gap-2 rounded-lg border p-4 text-sm transition-colors ${
+                            theme === value
+                              ? "border-blue-400 bg-blue-500/10 text-foreground"
+                              : "border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-foreground"
+                          }`}
+                        >
+                          <Icon className={`h-5 w-5 ${theme === value ? "text-blue-400" : ""}`} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground/50">
+                      Currently showing {resolvedTheme} mode{theme === "system" ? " (based on system preference)" : ""}
+                    </p>
                   </div>
-                  {activePreset?.docsUrl ? (
+                </div>
+              </>
+            ) : activeNav === "Models" ? (
+              <>
+                <div className="shrink-0 px-6 pb-4 pt-6">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2.5 text-xl font-semibold">
+                      <SlidersHorizontal className="h-5 w-5 text-blue-400" />
+                      Models
+                    </DialogTitle>
+                    <DialogDescription className="mt-1.5 text-sm text-muted-foreground">
+                      Configure API keys, models, and base URLs.
+                      <span className="ml-1.5 inline-flex items-center rounded-full bg-[var(--surface-active)] px-2 py-0.5 text-[11px]">
+                        {configuredCount}/{providers.length} configured
+                      </span>
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 h-px bg-gradient-to-r from-[var(--surface-divider)] via-[var(--surface-elevated)] to-transparent" />
+                </div>
+
+                <div className="flex-1 overflow-auto px-6 pb-6">
+                  {/* Provider selector card */}
+                  <div className="rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="mb-4">
+                      <div className="text-sm font-medium">Active Provider</div>
+                      <p className="mt-0.5 text-xs text-muted-foreground/50">Select which LLM provider to use</p>
+                    </div>
+                    <Select
+                      value={activeProvider}
+                      onValueChange={(value: string) =>
+                        setDraft((prev) => ({ ...prev, activeProvider: value as ProviderId }))
+                      }
+                    >
+                      <SelectTrigger className="border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:ring-1 focus:ring-[var(--surface-border)]">
+                        <SelectValue placeholder="Select provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {providers.map((provider) => {
+                          const hasKey = (draft.providers[provider.id]?.apiKey || "").trim().length > 0;
+                          return (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{provider.name}</span>
+                                {hasKey ? (
+                                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">Configured</span>
+                                ) : (
+                                  <span className="rounded-full border border-[var(--surface-border)] px-1.5 py-0.5 text-[10px] text-muted-foreground/50">No Key</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Provider info */}
+                    <div className="mt-4 rounded-lg border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-3 text-xs leading-relaxed text-muted-foreground/60">
+                      <p>Default provider is OpenRouter. You can switch providers anytime.</p>
+                      <p className="mt-1">Each provider keeps its own API key, model, and base URL.</p>
+                    </div>
+                  </div>
+
+                  {/* Config fields card */}
+                  <div className="mt-4 rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium">{activePreset?.name ?? "Provider"} Config</div>
+                        <p className="mt-0.5 text-xs text-muted-foreground/50">API key, model, and endpoint</p>
+                      </div>
+                      {activePreset?.docsUrl ? (
+                        <a
+                          href={activePreset.docsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
+                        >
+                          Docs
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-0">
+                      {/* API Key */}
+                      <div className="border-b border-[var(--surface-border-subtle)] pb-4">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
+                          <KeyRound className="h-3.5 w-3.5" /> API Key
+                        </label>
+                        <Input
+                          className="mt-2 border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:border-[var(--surface-border)] focus:ring-1 focus:ring-[var(--surface-border)]"
+                          type="password"
+                          placeholder="Enter API key"
+                          value={activeConfig?.apiKey ?? ""}
+                          onChange={(e) => updateProviderField(activeProvider, "apiKey", e.target.value)}
+                        />
+                      </div>
+
+                      {/* Model */}
+                      <div className="border-b border-[var(--surface-border-subtle)] pb-4 pt-4">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
+                          <Cpu className="h-3.5 w-3.5" /> Model
+                        </label>
+                        <Input
+                          className="mt-2 border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:border-[var(--surface-border)] focus:ring-1 focus:ring-[var(--surface-border)]"
+                          placeholder={activePreset?.defaultModel ?? "Model name"}
+                          value={activeConfig?.model ?? ""}
+                          onChange={(e) => updateProviderField(activeProvider, "model", e.target.value)}
+                        />
+                      </div>
+
+                      {/* Base URL */}
+                      <div className="pt-4">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
+                          <Link2 className="h-3.5 w-3.5" /> Base URL
+                        </label>
+                        <Input
+                          className="mt-2 border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:border-[var(--surface-border)] focus:ring-1 focus:ring-[var(--surface-border)]"
+                          placeholder={activePreset?.defaultBaseUrl ?? "https://..."}
+                          value={activeConfig?.baseUrl ?? ""}
+                          onChange={(e) => updateProviderField(activeProvider, "baseUrl", e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {error ? (
+                      <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        {error}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="mt-5 flex items-center justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => onOpenChange(false)}
+                      className="border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)]"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50"
+                    >
+                      {saving ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : activeNav === "About" ? (
+              <>
+                <div className="shrink-0 px-6 pb-4 pt-6">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2.5 text-xl font-semibold">
+                      <Info className="h-5 w-5 text-blue-400" />
+                      About
+                    </DialogTitle>
+                    <DialogDescription className="mt-1.5 text-sm text-muted-foreground">
+                      About OhMyCowork
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 h-px bg-gradient-to-r from-[var(--surface-divider)] via-[var(--surface-elevated)] to-transparent" />
+                </div>
+
+                <div className="flex-1 overflow-auto px-6 pb-6">
+                  <div className="rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="text-sm font-medium">OhMyCowork</div>
+                    <p className="mt-1 text-xs text-muted-foreground">AI-powered workspace for creative collaboration.</p>
                     <a
-                      href={activePreset.docsUrl}
+                      href="https://ohmyco.work"
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground"
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm text-blue-400 transition-colors hover:text-blue-300"
                     >
-                      Docs
-                      <ExternalLink className="h-3 w-3" />
+                      ohmyco.work
+                      <ExternalLink className="h-3.5 w-3.5" />
                     </a>
-                  ) : null}
-                </div>
-
-                <div className="space-y-0">
-                  {/* API Key */}
-                  <div className="border-b border-white/[0.04] pb-4">
-                    <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
-                      <KeyRound className="h-3.5 w-3.5" /> API Key
-                    </label>
-                    <Input
-                      className="mt-2 border-white/[0.06] bg-white/[0.03] focus:border-white/20 focus:ring-1 focus:ring-white/10"
-                      type="password"
-                      placeholder="Enter API key"
-                      value={activeConfig?.apiKey ?? ""}
-                      onChange={(e) => updateProviderField(activeProvider, "apiKey", e.target.value)}
-                    />
                   </div>
 
-                  {/* Model */}
-                  <div className="border-b border-white/[0.04] pb-4 pt-4">
-                    <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
-                      <Cpu className="h-3.5 w-3.5" /> Model
-                    </label>
-                    <Input
-                      className="mt-2 border-white/[0.06] bg-white/[0.03] focus:border-white/20 focus:ring-1 focus:ring-white/10"
-                      placeholder={activePreset?.defaultModel ?? "Model name"}
-                      value={activeConfig?.model ?? ""}
-                      onChange={(e) => updateProviderField(activeProvider, "model", e.target.value)}
-                    />
-                  </div>
-
-                  {/* Base URL */}
-                  <div className="pt-4">
-                    <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/80">
-                      <Link2 className="h-3.5 w-3.5" /> Base URL
-                    </label>
-                    <Input
-                      className="mt-2 border-white/[0.06] bg-white/[0.03] focus:border-white/20 focus:ring-1 focus:ring-white/10"
-                      placeholder={activePreset?.defaultBaseUrl ?? "https://..."}
-                      value={activeConfig?.baseUrl ?? ""}
-                      onChange={(e) => updateProviderField(activeProvider, "baseUrl", e.target.value)}
-                    />
+                  <div className="mt-4 rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="text-sm font-medium">More Apps</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Check out other projects by the author.</p>
+                    <a
+                      href="https://xnu.app"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm text-blue-400 transition-colors hover:text-blue-300"
+                    >
+                      xnu.app
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
                   </div>
                 </div>
-
-                {error ? (
-                  <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    {error}
-                  </div>
-                ) : null}
+              </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="text-sm text-muted-foreground">Coming soon</p>
               </div>
-
-              {/* Action buttons */}
-              <div className="mt-5 flex items-center justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  className="border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save changes"}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </DialogContent>
