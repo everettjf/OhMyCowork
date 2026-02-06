@@ -214,13 +214,18 @@ function WorkspaceTree({
         if (error) {
           return (
             <div className="py-2 text-xs text-red-600">
-              Failed to read folder: {error}
+              Error reading folder ({path}): {error}
             </div>
           );
         }
         return <div className="py-2 text-xs text-muted-foreground">Loading folder...</div>;
       }
-      if (entries.length === 0) return <div className="py-2 text-xs text-muted-foreground">Empty folder</div>;
+      if (entries.length === 0)
+        return (
+          <div className="py-2 text-[11px] italic text-muted-foreground/70">
+            No items
+          </div>
+        );
 
       return entries.map((entry) => {
         const isExpanded = !!expandedPaths[entry.path];
@@ -280,6 +285,8 @@ function StudioShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(260);
+  const [rightWidth, setRightWidth] = useState(420);
 
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
@@ -425,11 +432,12 @@ function StudioShell({
         <div className="absolute inset-0 app-grid-overlay" />
 
         <div
-          className={`relative grid h-full w-full grid-cols-1 ${
-            studioOpen
-              ? "lg:grid-cols-[260px_minmax(0,1fr)_420px] xl:grid-cols-[280px_minmax(0,1fr)_460px]"
-              : "lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]"
-          }`}
+          className="relative grid h-full w-full"
+          style={{
+            gridTemplateColumns: studioOpen
+              ? `${leftWidth}px 6px minmax(0,1fr) 6px ${rightWidth}px`
+              : `${leftWidth}px 6px minmax(0,1fr)`,
+          }}
         >
           <aside className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-panel-base/80 p-3 backdrop-blur-md">
             <div className="mb-3 flex items-center gap-2">
@@ -456,6 +464,25 @@ function StudioShell({
               </div>
             </div>
           </aside>
+
+          <div
+            className="cursor-col-resize bg-transparent hover:bg-white/5"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              const startX = event.clientX;
+              const startWidth = leftWidth;
+              const handleMove = (moveEvent: PointerEvent) => {
+                const next = Math.min(360, Math.max(220, startWidth + (moveEvent.clientX - startX)));
+                setLeftWidth(next);
+              };
+              const handleUp = () => {
+                window.removeEventListener("pointermove", handleMove);
+                window.removeEventListener("pointerup", handleUp);
+              };
+              window.addEventListener("pointermove", handleMove);
+              window.addEventListener("pointerup", handleUp);
+            }}
+          />
 
           <section className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-panel-base/85 backdrop-blur-md">
               <header className="flex items-center justify-between gap-2 border-b border-[var(--surface-border)] px-3 py-2">
@@ -502,7 +529,26 @@ function StudioShell({
           </section>
 
             {studioOpen ? (
-              <aside className="flex min-h-0 flex-col bg-panel-deep/95 backdrop-blur-md">
+              <>
+                <div
+                  className="cursor-col-resize bg-transparent hover:bg-white/5"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    const startX = event.clientX;
+                    const startWidth = rightWidth;
+                    const handleMove = (moveEvent: PointerEvent) => {
+                      const next = Math.min(560, Math.max(320, startWidth - (moveEvent.clientX - startX)));
+                      setRightWidth(next);
+                    };
+                    const handleUp = () => {
+                      window.removeEventListener("pointermove", handleMove);
+                      window.removeEventListener("pointerup", handleUp);
+                    };
+                    window.addEventListener("pointermove", handleMove);
+                    window.addEventListener("pointerup", handleUp);
+                  }}
+                />
+                <aside className="flex min-h-0 flex-col bg-panel-deep/95 backdrop-blur-md">
                 <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-3 py-2">
                   <div className="text-sm font-semibold">Workspace</div>
                   <div className="flex items-center gap-1">
@@ -537,6 +583,7 @@ function StudioShell({
 
                   <div className="min-h-0 flex-1 rounded-lg border border-[var(--surface-border)] bg-panel-inset p-2">
                     <ScrollArea className="h-full">
+                      <div className="min-w-max pr-2">
                       {activeWorkspacePath ? (
                         <WorkspaceTree
                           rootPath={activeWorkspacePath}
@@ -549,10 +596,12 @@ function StudioShell({
                       ) : (
                         <div className="text-xs text-muted-foreground">File tree appears after opening a workspace.</div>
                       )}
+                      </div>
                     </ScrollArea>
                   </div>
                 </div>
               </aside>
+              </>
             ) : null}
             {contextMenu ? (
               <div

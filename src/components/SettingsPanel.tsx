@@ -250,9 +250,9 @@ export function SettingsPanel({
                         setDraft((prev) => ({ ...prev, activeProvider: value as ProviderId }))
                       }
                     >
-                      <SelectTrigger className="border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:ring-1 focus:ring-[var(--surface-border)]">
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
+                    <SelectTrigger className="min-w-[220px] border-[var(--surface-border-subtle)] bg-[var(--surface-hover)] focus:ring-1 focus:ring-[var(--surface-border)] [&>span]:line-clamp-none [&>span]:whitespace-nowrap">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
                       <SelectContent>
                         {providers.map((provider) => {
                           const hasKey = (draft.providers[provider.id]?.apiKey || "").trim().length > 0;
