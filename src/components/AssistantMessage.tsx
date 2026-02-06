@@ -2,6 +2,7 @@ import type { FC, PropsWithChildren } from "react";
 import { Fragment } from "react";
 import { MessagePrimitive, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { AssistantActionBar, BranchPicker, makeMarkdownText } from "@assistant-ui/react-ui";
+import { getAvatarIcon } from "@/components/avatarIcons";
 
 type ToolResultJson = Record<string, unknown>;
 
@@ -292,10 +293,14 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
 const MarkdownText = makeMarkdownText({ className: "markdown" });
 
 const AssistantMessage: FC = () => {
+  const AvatarIcon = getAvatarIcon();
+
   return (
     <MessagePrimitive.Root className="aui-assistant-message-root">
       <div className="aui-avatar-root aui-assistant-avatar">
-        <div className="aui-avatar-fallback text-xs font-semibold text-muted-foreground">A</div>
+        <div className="aui-avatar-fallback text-muted-foreground">
+          <AvatarIcon className="h-5 w-5" />
+        </div>
       </div>
 
       <div className="aui-assistant-message-content">

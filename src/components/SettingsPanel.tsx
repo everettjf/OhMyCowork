@@ -123,7 +123,7 @@ export function SettingsPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[760px] p-0">
+      <DialogContent className="h-svh w-svw max-w-none rounded-none p-0">
         <div className="flex h-full">
           <aside className="w-56 border-r border-white/10 bg-[#0f1116] p-4">
             <button

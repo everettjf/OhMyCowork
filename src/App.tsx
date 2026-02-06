@@ -36,6 +36,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AssistantMessage } from "@/components/AssistantMessage";
+import { ThreadWelcome } from "@/components/ThreadWelcome";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
@@ -343,13 +344,15 @@ function StudioShell({
             <div className="min-h-0 flex-1">
               <ThreadList />
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-              <div className="flex items-center gap-1">
-                <Button size="icon" variant="ghost" onClick={() => setSkillsOpen(true)}>
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" className="h-9 justify-start gap-2" onClick={() => setSkillsOpen(true)}>
                   <Sparkles className="h-4 w-4" />
+                  Skills
                 </Button>
-                <Button size="icon" variant="ghost" onClick={() => setSettingsOpen(true)}>
+                <Button variant="outline" className="h-9 justify-start gap-2" onClick={() => setSettingsOpen(true)}>
                   <Settings className="h-4 w-4" />
+                  Settings
                 </Button>
               </div>
             </div>
@@ -387,6 +390,7 @@ function StudioShell({
                   }}
                   components={{
                     AssistantMessage,
+                    ThreadWelcome,
                   }}
                   strings={{
                     composer: {

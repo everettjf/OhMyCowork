@@ -24,6 +24,7 @@ import {
   Presentation,
   RefreshCw,
   Pencil,
+  ArrowLeft,
 } from "lucide-react";
 import type { Skill } from "@/types";
 
@@ -208,9 +209,19 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[760px] p-0">
+      <DialogContent className="h-svh w-svw max-w-none rounded-none p-0">
         <div className="flex h-full flex-col">
           <DialogHeader className="border-b border-white/10 px-6 py-5">
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to app
+              </button>
+            </div>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <DialogTitle className="text-2xl font-semibold">Skills</DialogTitle>
