@@ -29,9 +29,9 @@ import {
   ChevronDown,
   ChevronRight,
   PanelRight,
-  Bot,
   RefreshCw,
 } from "lucide-react";
+import appIcon from "@/assets/appicon.png";
 
 import { pingSidecar, sendMessage, warmupModel } from "@/services/agent";
 import type { WorkspaceEntry } from "@/types";
@@ -462,7 +462,7 @@ function StudioShell({
         >
           <aside className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-panel-base/80 p-3 backdrop-blur-md">
             <div className="mb-3 flex items-center gap-2">
-              <Bot className="h-5 w-5 text-orange-600" />
+              <img src={appIcon} alt="OhMyCowork" className="h-5 w-5 rounded-[6px]" />
               <div>
                 <div className="text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-amber-400 to-rose-500">
                   OhMyCowork
