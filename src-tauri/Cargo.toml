@@ -1,12 +1,12 @@
 [package]
-name = "OhMyCowork"
+name = "oh_my_cowork"
 version = "0.1.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "OhMyCowork_lib"
+name = "oh_my_cowork_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
