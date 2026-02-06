@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { createThreadHistoryAdapter } from "@/lib/threadHistory";
 
 type StreamController = {
   push: (delta: string) => void;
@@ -927,7 +928,8 @@ function App() {
     []
   );
 
-  const runtime = useLocalRuntime(adapter);
+  const historyAdapter = useMemo(() => createThreadHistoryAdapter(), []);
+  const runtime = useLocalRuntime(adapter, { adapters: { history: historyAdapter } });
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;

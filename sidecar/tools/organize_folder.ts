@@ -2,6 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { ToolContext, createNotifier, resolveWorkspacePath } from "./types.js";
 
 interface CategoryRule {
@@ -44,6 +45,17 @@ interface MoveRecord {
   to: string;
 }
 
+interface RenameRecord {
+  from: string;
+  to: string;
+}
+
+interface DedupRecord {
+  from: string;
+  kept: string;
+  reason: "hash-match";
+}
+
 interface ErrorRecord {
   path: string;
   message: string;
@@ -71,6 +83,9 @@ async function ensureUniquePath(targetPath: string): Promise<string> {
   while (true) {
     try {
       await fs.access(candidate);
+      if (path.resolve(candidate) === path.resolve(targetPath)) {
+        return candidate;
+      }
       candidate = path.join(dir, `${base} (${counter})${ext}`);
       counter += 1;
     } catch {
@@ -109,6 +124,120 @@ function shouldSkipDirName(dirName: string): boolean {
   return false;
 }
 
+const DUPLICATE_SUFFIX = /(.*)\s\((\d+)\)(\.[^./\\]+)?$/;
+
+async function normalizeDuplicateNames(
+  root: string,
+  toWorkspaceRelative: (absolutePath: string) => string,
+  errors: ErrorRecord[]
+): Promise<RenameRecord[]> {
+  const renamed: RenameRecord[] = [];
+
+  const walk = async (dirPath: string) => {
+    let items: fs.Dirent[] = [];
+    try {
+      items = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const item of items) {
+      if (item.isDirectory()) {
+        if (shouldSkipDirName(item.name)) continue;
+        await walk(path.join(dirPath, item.name));
+        continue;
+      }
+      if (!item.isFile()) continue;
+
+      const absolutePath = path.join(dirPath, item.name);
+      const match = item.name.match(DUPLICATE_SUFFIX);
+      if (!match) continue;
+
+      const base = match[1];
+      const ext = match[3] ?? "";
+      const cleanName = `${base}${ext}`;
+      const cleanPath = path.join(dirPath, cleanName);
+
+      try {
+        await fs.access(cleanPath);
+        // Base file exists, keep the numbered duplicate.
+        continue;
+      } catch {
+        // Base doesn't exist, safe to rename.
+      }
+
+      try {
+        const destination = await ensureUniquePath(cleanPath);
+        if (path.resolve(destination) === path.resolve(absolutePath)) continue;
+        await fs.rename(absolutePath, destination);
+        renamed.push({ from: toWorkspaceRelative(absolutePath), to: toWorkspaceRelative(destination) });
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        errors.push({ path: absolutePath, message: err?.message || String(error) });
+      }
+    }
+  };
+
+  await walk(root);
+  return renamed;
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  const data = await fs.readFile(filePath);
+  return crypto.createHash("md5").update(data).digest("hex");
+}
+
+async function dedupeByHash(
+  root: string,
+  toWorkspaceRelative: (absolutePath: string) => string,
+  errors: ErrorRecord[]
+): Promise<DedupRecord[]> {
+  const removed: DedupRecord[] = [];
+  const byName = new Map<string, string>();
+
+  const walk = async (dirPath: string) => {
+    let items: fs.Dirent[] = [];
+    try {
+      items = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const item of items) {
+      const absolutePath = path.join(dirPath, item.name);
+      if (item.isDirectory()) {
+        if (shouldSkipDirName(item.name)) continue;
+        await walk(absolutePath);
+        continue;
+      }
+      if (!item.isFile()) continue;
+
+      const existing = byName.get(item.name);
+      if (!existing) {
+        byName.set(item.name, absolutePath);
+        continue;
+      }
+      try {
+        const [hashA, hashB] = await Promise.all([hashFile(existing), hashFile(absolutePath)]);
+        if (hashA === hashB) {
+          await fs.unlink(absolutePath);
+          removed.push({
+            from: toWorkspaceRelative(absolutePath),
+            kept: toWorkspaceRelative(existing),
+            reason: "hash-match",
+          });
+        }
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        errors.push({ path: absolutePath, message: err?.message || String(error) });
+      }
+    }
+  };
+
+  await walk(root);
+  return removed;
+}
+
 export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus }: ToolContext) {
   const notify = createNotifier("organize_folder", emitStatus, requestId);
 
@@ -133,9 +262,11 @@ export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus 
       }
 
       const moved: MoveRecord[] = [];
+      const renamed: RenameRecord[] = [];
       const skipped: string[] = [];
       const errors: ErrorRecord[] = [];
       const deletedEmptyFolders: string[] = [];
+      const deduped: DedupRecord[] = [];
       const touchedDirs = new Set<string>();
 
       const toWorkspaceRelative = (absolutePath: string) => {
@@ -251,17 +382,25 @@ export function createOrganizeFolderTool({ workspaceRoot, requestId, emitStatus 
         }
       };
 
+      const renames = await normalizeDuplicateNames(absoluteFolder, toWorkspaceRelative, errors);
+      renamed.push(...renames);
+      const dedupes = await dedupeByHash(absoluteFolder, toWorkspaceRelative, errors);
+      deduped.push(...dedupes);
       await cleanupTouchedDirs();
       await cleanupAllEmptyDirs(absoluteFolder);
 
       const result = {
         path: folderPath,
         moved,
+        renamed,
+        deduped,
         deletedEmptyFolders,
         skipped,
         errors,
         summary: {
           moved: moved.length,
+          renamed: renamed.length,
+          deduped: deduped.length,
           deletedEmptyFolders: deletedEmptyFolders.length,
           skipped: skipped.length,
           errors: errors.length,

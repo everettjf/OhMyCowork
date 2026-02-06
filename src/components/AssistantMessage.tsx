@@ -4,6 +4,7 @@ import { MessagePrimitive, type ToolCallMessagePartProps } from "@assistant-ui/r
 import { AssistantActionBar, BranchPicker, makeMarkdownText } from "@assistant-ui/react-ui";
 import { useAuiState } from "@assistant-ui/store";
 import { getAvatarIcon } from "@/components/avatarIcons";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 type ToolResultJson = Record<string, unknown>;
 
@@ -323,7 +324,29 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
   );
 };
 
-const MarkdownText = makeMarkdownText({ className: "markdown" });
+const MarkdownText = makeMarkdownText({
+  className: "markdown",
+  components: {
+    a: ({ href, className, ...props }) => {
+      const safeHref = typeof href === "string" && href.trim().length > 0 ? href : null;
+      if (!safeHref) {
+        return <span className={className} {...props} />;
+      }
+      return (
+        <a
+          href={safeHref}
+          className={className}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void openUrl(safeHref);
+          }}
+          {...props}
+        />
+      );
+    },
+  },
+});
 
 const AssistantMessage: FC = () => {
   const AvatarIcon = getAvatarIcon();
