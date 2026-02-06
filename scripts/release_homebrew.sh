@@ -6,7 +6,7 @@ REPO_DIR="$ROOT_DIR"
 TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 TAP_REPO="${TAP_REPO:-ohmyco/homebrew-tap}"
-CASK_PATH="${CASK_PATH:-Casks/ohmycowork.rb}"
+CASK_PATH="${CASK_PATH:-Casks/OhMyCowork.rb}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -63,7 +63,7 @@ sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK_PATH"
 sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
 
 git add "$CASK_PATH"
-git commit -m "bump ohmycowork to $VERSION"
+git commit -m "bump OhMyCowork to $VERSION"
 git push
 
 echo "Done. Released $TAG and updated Homebrew cask."

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ohmycowork",
+      "name": "OhMyCowork",
       "dependencies": {
         "@playwright/test": "^1.58.1",
         "@radix-ui/react-dialog": "^1.1.15",

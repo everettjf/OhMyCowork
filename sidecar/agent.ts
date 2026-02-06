@@ -55,7 +55,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   xai: "https://api.x.ai/v1",
   moonshot: "https://api.moonshot.cn/v1",
 };
-const AGENT_NAME = "ohmycowork";
+const AGENT_NAME = "OhMyCowork";
 
 interface FileInfo {
   path: string;

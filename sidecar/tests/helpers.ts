@@ -6,7 +6,7 @@ import { join } from "node:path";
  * Create a temporary workspace directory for testing
  */
 export async function createTestWorkspace() {
-  const workspaceRoot = await mkdtemp(join(tmpdir(), "ohmycowork-test-"));
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "OhMyCowork-test-"));
   return workspaceRoot;
 }
 
