@@ -1,7 +1,8 @@
 import type { FC, PropsWithChildren } from "react";
-import { Children, Fragment } from "react";
+import { Fragment } from "react";
 import { MessagePrimitive, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { AssistantActionBar, BranchPicker, makeMarkdownText } from "@assistant-ui/react-ui";
+import { useAuiState } from "@assistant-ui/store";
 import { getAvatarIcon } from "@/components/avatarIcons";
 
 type ToolResultJson = Record<string, unknown>;
@@ -173,15 +174,29 @@ const ToolGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>>
   startIndex,
   endIndex,
 }) => {
-  const childrenArray = Children.toArray(children).filter(Boolean);
-  const count = childrenArray.length;
+  const parts = useAuiState(({ message }) => message.parts);
+  let count = 0;
+  for (let i = startIndex; i <= endIndex; i += 1) {
+    const part = parts[i] as Partial<ToolCallMessagePartProps> | undefined;
+    if (!part || part.type !== "tool-call") continue;
+    if (part.toolName !== "skills") {
+      count += 1;
+      continue;
+    }
+    const argsText = typeof part.argsText === "string" ? part.argsText : "";
+    const resultText =
+      typeof part.result === "string" ? part.result : part.result != null ? JSON.stringify(part.result) : "";
+    const rawText = `${argsText}\n${resultText}`;
+    if (rawText.includes("/skills/user/") || rawText.includes("/skills/project/")) continue;
+    count += 1;
+  }
   if (count === 0) return null;
   return (
     <details className="my-3 rounded-lg border border-[var(--surface-border)] bg-panel-inset px-3 py-2">
       <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
         Tool calls • {count}
       </summary>
-      <div className="mt-2 space-y-2">{childrenArray}</div>
+      <div className="mt-2 space-y-2">{children}</div>
     </details>
   );
 };

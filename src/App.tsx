@@ -28,6 +28,7 @@ import {
   ChevronRight,
   PanelRight,
   Bot,
+  RefreshCw,
 } from "lucide-react";
 
 import { pingSidecar, sendMessage, warmupModel } from "@/services/agent";
@@ -40,6 +41,7 @@ import { ThreadWelcome } from "@/components/ThreadWelcome";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 type StreamController = {
   push: (delta: string) => void;
@@ -194,16 +196,30 @@ function WorkspaceTree({
   workspaceEntries,
   expandedPaths,
   toggleDirectory,
+  onContextMenu,
+  workspaceErrors,
 }: {
   rootPath: string;
   workspaceEntries: Record<string, WorkspaceEntry[]>;
   expandedPaths: Record<string, boolean>;
   toggleDirectory: (path: string) => Promise<void>;
+  onContextMenu: (event: React.MouseEvent, entry: WorkspaceEntry) => void;
+  workspaceErrors: Record<string, string>;
 }) {
   const renderWorkspaceEntries = useCallback(
     (path: string, depth = 0): React.ReactNode => {
       const entries = workspaceEntries[path];
-      if (!entries) return <div className="py-2 text-xs text-muted-foreground">Loading folder...</div>;
+      if (!entries) {
+        const error = workspaceErrors[path];
+        if (error) {
+          return (
+            <div className="py-2 text-xs text-red-600">
+              Failed to read folder: {error}
+            </div>
+          );
+        }
+        return <div className="py-2 text-xs text-muted-foreground">Loading folder...</div>;
+      }
       if (entries.length === 0) return <div className="py-2 text-xs text-muted-foreground">Empty folder</div>;
 
       return entries.map((entry) => {
@@ -220,6 +236,7 @@ function WorkspaceTree({
                 onClick={() => {
                   void toggleDirectory(entry.path);
                 }}
+                onContextMenu={(event) => onContextMenu(event, entry)}
               >
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <Folder className="h-3.5 w-3.5" />
@@ -235,6 +252,7 @@ function WorkspaceTree({
             key={entry.path}
             className="flex items-center gap-2 py-1 text-xs text-muted-foreground"
             style={{ paddingLeft: paddingLeft + 18 }}
+            onContextMenu={(event) => onContextMenu(event, entry)}
           >
             <FileText className="h-3.5 w-3.5" />
             <span className="truncate">{entry.name}</span>
@@ -242,7 +260,7 @@ function WorkspaceTree({
         );
       });
     },
-    [expandedPaths, toggleDirectory, workspaceEntries]
+    [expandedPaths, toggleDirectory, workspaceEntries, workspaceErrors]
   );
 
   return <>{renderWorkspaceEntries(rootPath)}</>;
@@ -265,14 +283,24 @@ function StudioShell({
 
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceErrors, setWorkspaceErrors] = useState<Record<string, string>>({});
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    entry: WorkspaceEntry;
+  } | null>(null);
 
   const activeThreadId = useThreadList((t) => t.mainThreadId);
   const activeWorkspacePath = workspaceByThreadId[activeThreadId];
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
-      setWorkspaceError(null);
+      setWorkspaceErrors((prev) => {
+        if (!prev[path]) return prev;
+        const next = { ...prev };
+        delete next[path];
+        return next;
+      });
       const entries = await readDir(path);
       const mappedEntries = await Promise.all(
         entries.map(async (entry) => ({
@@ -288,7 +316,10 @@ function StudioShell({
       });
       setWorkspaceEntries((prev) => ({ ...prev, [path]: mappedEntries }));
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "Failed to read folder");
+      setWorkspaceErrors((prev) => ({
+        ...prev,
+        [path]: error instanceof Error ? error.message : "Failed to read folder",
+      }));
     }
   }, []);
 
@@ -305,6 +336,73 @@ function StudioShell({
     setStudioOpen(true);
     await loadDirectory(selected);
   }, [activeThreadId, loadDirectory, setWorkspaceByThreadId]);
+
+  const handleRefreshWorkspace = useCallback(async () => {
+    if (!activeWorkspacePath) return;
+    await loadDirectory(activeWorkspacePath);
+  }, [activeWorkspacePath, loadDirectory]);
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent, entry: WorkspaceEntry) => {
+      event.preventDefault();
+      setContextMenu({ x: event.clientX, y: event.clientY, entry });
+    },
+    []
+  );
+
+  const toRelativePath = useCallback(
+    (fullPath: string) => {
+      if (!activeWorkspacePath) return fullPath;
+      const root = activeWorkspacePath.replace(/\\/g, "/").replace(/\/+$/, "");
+      const normalized = fullPath.replace(/\\/g, "/");
+      if (normalized === root) return ".";
+      if (normalized.startsWith(`${root}/`)) {
+        return normalized.slice(root.length + 1);
+      }
+      return fullPath;
+    },
+    [activeWorkspacePath]
+  );
+
+  const handleCopyText = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore clipboard failures
+    }
+  }, []);
+
+  const handleContextAction = useCallback(
+    async (action: "copy-full" | "copy-relative" | "reveal") => {
+      if (!contextMenu) return;
+      const target = contextMenu.entry;
+      setContextMenu(null);
+      if (action === "copy-full") {
+        await handleCopyText(target.path);
+        return;
+      }
+      if (action === "copy-relative") {
+        await handleCopyText(toRelativePath(target.path));
+        return;
+      }
+      await revealItemInDir(target.path);
+    },
+    [contextMenu, handleCopyText, toRelativePath]
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    window.addEventListener("click", handleClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("click", handleClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [contextMenu]);
 
   const toggleDirectory = useCallback(
     async (path: string) => {
@@ -387,6 +485,7 @@ function StudioShell({
                       { prompt: "Hello, what can you do?", text: "What can you do?" },
                       { prompt: "What is the current date and time?", text: "Current Time" },
                       { prompt: "Read the website https://xnu.app and summarize its content", text: "Read xnu.app" },
+                      { prompt: "Organize my workspace", text: "Organize my workspace" },
                     ],
                   }}
                   components={{
@@ -410,6 +509,15 @@ function StudioShell({
                     <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
                       {activeWorkspacePath ? "Change" : "Open Workspace"}
                     </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => void handleRefreshWorkspace()}
+                      disabled={!activeWorkspacePath}
+                      aria-label="Refresh workspace"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
                     <Button size="icon" variant="ghost" onClick={() => setStudioOpen(false)} aria-label="Collapse workspace">
                       <PanelRight className="h-4 w-4 rotate-180" />
                     </Button>
@@ -418,12 +526,13 @@ function StudioShell({
 
                 <div className="flex min-h-0 flex-1 flex-col p-3">
                   <div className="mb-2 min-w-0">
-                    <div className="text-xs text-muted-foreground">Root</div>
                     <div className="truncate text-xs text-muted-foreground">{activeWorkspacePath ?? "No workspace selected"}</div>
                   </div>
 
-                  {workspaceError ? (
-                    <div className="mb-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-600">{workspaceError}</div>
+                  {activeWorkspacePath && workspaceErrors[activeWorkspacePath] ? (
+                    <div className="mb-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-600">
+                      {workspaceErrors[activeWorkspacePath]}
+                    </div>
                   ) : null}
 
                   <div className="min-h-0 flex-1 rounded-lg border border-[var(--surface-border)] bg-panel-inset p-2">
@@ -434,6 +543,8 @@ function StudioShell({
                           workspaceEntries={workspaceEntries}
                           expandedPaths={expandedPaths}
                           toggleDirectory={toggleDirectory}
+                          onContextMenu={handleContextMenu}
+                          workspaceErrors={workspaceErrors}
                         />
                       ) : (
                         <div className="text-xs text-muted-foreground">File tree appears after opening a workspace.</div>
@@ -442,6 +553,34 @@ function StudioShell({
                   </div>
                 </div>
               </aside>
+            ) : null}
+            {contextMenu ? (
+              <div
+                className="fixed z-50 min-w-[180px] rounded-md border border-[var(--surface-border)] bg-panel-card shadow-lg"
+                style={{ left: contextMenu.x, top: contextMenu.y }}
+              >
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-muted/60"
+                  onClick={() => void handleContextAction("copy-full")}
+                >
+                  Copy full path
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-muted/60"
+                  onClick={() => void handleContextAction("copy-relative")}
+                >
+                  Copy relative path
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-muted/60"
+                  onClick={() => void handleContextAction("reveal")}
+                >
+                  Reveal in Finder
+                </button>
+              </div>
             ) : null}
         </div>
       </div>

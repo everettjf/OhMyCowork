@@ -8,6 +8,8 @@
     "opener:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-read-dir",
+    "fs:read-dirs",
     "store:default",
     "shell:default",
     {
@@ -18,6 +20,9 @@
         },
         {
           "path": "$APPCONFIG/**"
+        },
+        {
+          "path": "$HOME/**"
         }
       ]
     }

@@ -2,6 +2,8 @@
  * Shared types for OhMyCowork sidecar tools
  */
 
+import path from "node:path";
+
 export interface ToolContext {
   workspaceRoot?: string;
   requestId?: string;
@@ -33,7 +35,6 @@ export function resolveWorkspacePath(
   workspaceRoot: string,
   targetPath: string
 ): string {
-  const path = require("node:path");
   const cleaned = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
   const absolute = path.resolve(workspaceRoot, cleaned);
   const relative = path.relative(workspaceRoot, absolute);
