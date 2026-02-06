@@ -974,7 +974,7 @@ function App() {
         requestId,
         null
       );
-      const cleaned = title.replace(/[\r\n]+/g, " ").trim();
+      const cleaned = title.replace(/[\r\n]+/g, " ").replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
       await updateThreadTitle(threadId, cleaned || fallback || "New Chat");
     },
     []
