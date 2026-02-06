@@ -30,7 +30,7 @@ import {
   Bot,
 } from "lucide-react";
 
-import { pingSidecar, sendMessage } from "@/services/agent";
+import { pingSidecar, sendMessage, warmupModel } from "@/services/agent";
 import type { WorkspaceEntry } from "@/types";
 import { useSettings } from "@/hooks/useSettings";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -463,6 +463,23 @@ function App() {
       // Best effort warmup; ignore failures.
     });
   }, []);
+
+  const warmedRef = useRef(false);
+  useEffect(() => {
+    if (warmedRef.current) return;
+    const current = settingsRef.current;
+    const providerConfig = current.providers[current.activeProvider];
+    if (!providerConfig?.apiKey || !providerConfig?.model) return;
+    warmedRef.current = true;
+    void warmupModel({
+      provider: current.activeProvider,
+      apiKey: providerConfig.apiKey,
+      model: providerConfig.model,
+      baseUrl: providerConfig.baseUrl,
+    }).catch(() => {
+      // Best effort warmup; ignore failures.
+    });
+  }, [settings]);
 
   const [workspaceByThreadId, setWorkspaceByThreadId] = useState<Record<string, string>>({});
   const workspaceByThreadIdRef = useRef(workspaceByThreadId);

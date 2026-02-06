@@ -110,7 +110,7 @@ export function createFileSearchTool({ workspaceRoot, requestId, emitStatus }: T
           })
         );
 
-        notify("tool_end", { count: fileInfos.length });
+        notify("tool_end", { total: files.length, files: fileInfos });
         return JSON.stringify({ files: fileInfos, total: files.length }, null, 2);
       } catch (error) {
         const err = error as Error;

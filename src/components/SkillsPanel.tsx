@@ -11,27 +11,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Search,
   Plus,
-  Package,
   Sparkles,
-  FolderOpen,
-  ExternalLink,
   Code2,
   Palette,
   Smartphone,
   Layers,
   FileCode,
-  Settings2,
   FileSpreadsheet,
   FileText,
   Presentation,
+  RefreshCw,
+  Pencil,
 } from "lucide-react";
 import type { Skill } from "@/types";
 
@@ -168,53 +160,11 @@ const MANAGED_SKILLS: Skill[] = [
   },
 ];
 
-function SkillCard({
-  skill,
-  onToggle
-}: {
-  skill: Skill;
-  onToggle: (id: string, enabled: boolean) => void;
-}) {
-  const icon = categoryIcons[skill.id] || categoryIcons.default;
-
-  return (
-    <div className="group flex items-start gap-3 rounded-lg border border-border/60 bg-card p-3 transition-colors hover:border-border hover:bg-accent/30">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h4 className="font-medium text-sm truncate">{skill.name}</h4>
-          {skill.version && (
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-              v{skill.version}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-          {skill.description}
-        </p>
-        {skill.author && (
-          <p className="text-[10px] text-muted-foreground/70 mt-1">
-            by {skill.author}
-          </p>
-        )}
-      </div>
-      <Switch
-        checked={skill.enabled}
-        onCheckedChange={(checked: boolean) => onToggle(skill.id, checked)}
-        className="shrink-0"
-      />
-    </div>
-  );
-}
-
 export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [bundledSkills, setBundledSkills] = useState<Skill[]>(BUNDLED_SKILLS);
   const [managedSkills, setManagedSkills] = useState<Skill[]>(MANAGED_SKILLS);
   const [workspaceSkills, setWorkspaceSkills] = useState<Skill[]>([]);
-  const [activeTab, setActiveTab] = useState("bundled");
 
   useEffect(() => {
     if (workspacePath) {
@@ -250,133 +200,103 @@ export function SkillsPanel({ open, onOpenChange, workspacePath }: SkillsPanelPr
   const enabledCount = [...bundledSkills, ...managedSkills, ...workspaceSkills]
     .filter(s => s.enabled).length;
 
+  const allSkills = filterSkills([
+    ...bundledSkills,
+    ...managedSkills,
+    ...workspaceSkills,
+  ]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl md:max-w-4xl h-[720px] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Skills Manager
-          </DialogTitle>
-          <DialogDescription>
-            Enable skills to extend agent capabilities. {enabledCount} skills active.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex items-center gap-2 px-1">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search skills..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8"
-          />
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="bundled" className="gap-1.5">
-              <Package className="h-3.5 w-3.5" />
-              Bundled
-              <span className="text-[10px] bg-muted px-1 rounded">
-                {bundledSkills.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="managed" className="gap-1.5">
-              <Settings2 className="h-3.5 w-3.5" />
-              Managed
-              <span className="text-[10px] bg-muted px-1 rounded">
-                {managedSkills.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="workspace" className="gap-1.5">
-              <FolderOpen className="h-3.5 w-3.5" />
-              Workspace
-              <span className="text-[10px] bg-muted px-1 rounded">
-                {workspaceSkills.length}
-              </span>
-            </TabsTrigger>
-          </TabsList>
-
-          <ScrollArea className="flex-1 mt-4 pr-4">
-            <TabsContent value="bundled" className="mt-0 space-y-2 min-h-[350px]">
-              {filterSkills(bundledSkills).map(skill => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  onToggle={(id, enabled) => handleToggle(id, enabled, "bundled")}
-                />
-              ))}
-              {filterSkills(bundledSkills).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No bundled skills match your search.
+      <DialogContent className="max-w-6xl h-[760px] p-0">
+        <div className="flex h-full flex-col">
+          <DialogHeader className="border-b border-white/10 px-6 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle className="text-2xl font-semibold">Skills</DialogTitle>
+                <DialogDescription className="mt-1 text-sm">
+                  Give Codex superpowers.{" "}
+                  <a className="text-primary hover:underline" href="#">
+                    Learn more
+                  </a>
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search skills"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 w-56 pl-8"
+                  />
                 </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="managed" className="mt-0 space-y-2 min-h-[350px]">
-              {filterSkills(managedSkills).map(skill => (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  onToggle={(id, enabled) => handleToggle(id, enabled, "managed")}
-                />
-              ))}
-              {filterSkills(managedSkills).length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No managed skills available.
-                </div>
-              )}
-              <div className="pt-4 text-center">
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Browse Skill Registry
+                <Button size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  New skill
                 </Button>
               </div>
-            </TabsContent>
+            </div>
+          </DialogHeader>
 
-            <TabsContent value="workspace" className="mt-0 space-y-2 min-h-[350px]">
-              {workspacePath ? (
-                <>
-                  {filterSkills(workspaceSkills).map(skill => (
-                    <SkillCard
-                      key={skill.id}
-                      skill={skill}
-                      onToggle={(id, enabled) => handleToggle(id, enabled, "workspace")}
-                    />
-                  ))}
-                  {workspaceSkills.length === 0 && (
-                    <div className="text-center py-8">
-                      <FolderOpen className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                      <p className="text-sm text-muted-foreground mb-2">
-                        No workspace skills found.
-                      </p>
-                      <p className="text-xs text-muted-foreground/70 mb-4">
-                        Create a <code className="bg-muted px-1 rounded">.deepagents/skills</code> folder in your workspace.
-                      </p>
-                      <Button variant="outline" size="sm" className="gap-1.5">
-                        <Plus className="h-3.5 w-3.5" />
-                        Create Skill
-                      </Button>
-                    </div>
-                  )}
-                </>
+          <div className="flex-1 overflow-hidden px-6 py-5">
+            <div className="mb-3 flex items-center justify-between text-sm text-muted-foreground">
+              <span>Installed</span>
+              <span>{enabledCount} enabled</span>
+            </div>
+
+            <ScrollArea className="h-full pr-4">
+              {allSkills.length === 0 ? (
+                <div className="py-16 text-center text-sm text-muted-foreground">
+                  No skills match your search.
+                </div>
               ) : (
-                <div className="text-center py-8">
-                  <FolderOpen className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    Select a workspace to view project-specific skills.
-                  </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {allSkills.map((skill) => (
+                    <div
+                      key={skill.id}
+                      className="group flex items-start gap-3 rounded-xl border border-white/10 bg-[#111318] p-3 transition-colors hover:border-white/20"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        {categoryIcons[skill.id] || categoryIcons.default}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="truncate text-sm font-semibold">{skill.name}</h4>
+                          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            {skill.category}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          {skill.description}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button size="icon" variant="ghost" className="h-8 w-8">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Switch
+                          checked={skill.enabled}
+                          onCheckedChange={(checked: boolean) =>
+                            handleToggle(skill.id, checked, skill.category)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
 
-        <div className="border-t pt-3 mt-auto">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5" />
-            Skills extend agent capabilities with specialized knowledge
+              {workspacePath ? null : (
+                <div className="mt-6 rounded-xl border border-dashed border-white/10 p-4 text-xs text-muted-foreground">
+                  Select a workspace to view project-specific skills.
+                </div>
+              )}
+            </ScrollArea>
           </div>
         </div>
       </DialogContent>

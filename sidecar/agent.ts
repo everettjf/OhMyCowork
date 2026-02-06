@@ -162,6 +162,19 @@ function createChatModel(
   });
 }
 
+function createWarmupModel(apiKey: string, model: string, provider?: string, baseUrl?: string): ChatOpenAI {
+  return new ChatOpenAI({
+    apiKey,
+    model,
+    streaming: false,
+    temperature: 0,
+    maxTokens: 1,
+    configuration: {
+      baseURL: resolveBaseUrl(provider, baseUrl),
+    },
+  });
+}
+
 interface ContentItem {
   text?: string;
   [key: string]: unknown;
@@ -371,6 +384,7 @@ No workspace folder is currently selected.
   }
 
   const { backend, skills } = buildSkillsConfig(workspaceRoot);
+  const instrumentedBackend = createSkillTraceBackend(backend, emitStatus, requestId);
   const subagents = [
     createFolderOrganizerSubagent({
       model: chatModel,
@@ -382,7 +396,7 @@ No workspace folder is currently selected.
 
   const agent = createDeepAgent({
     model: chatModel,
-    backend,
+    backend: instrumentedBackend,
     tools,
     skills: skills.length > 0 ? skills : undefined,
     subagents,
@@ -425,6 +439,55 @@ No workspace folder is currently selected.
   const finalText = formatMessageContent((lastAssistantMessage ?? fallbackMessage)?.content) || "No response from model.";
   console.error(`[sidecar stderr] model_response ${JSON.stringify(finalText)}`);
   return finalText;
+}
+
+async function warmup(request: SendMessageRequest): Promise<string> {
+  const { provider, apiKey, model, baseUrl } = request;
+  if (!apiKey || !model) return "skipped";
+  const warmupModel = createWarmupModel(apiKey, model, provider, baseUrl);
+  await warmupModel.invoke("ping");
+  return "ok";
+}
+
+function createSkillTraceBackend(backend: any, emitStatus?: StatusEmitter, requestId?: string) {
+  const notify = (stage: "tool_start" | "tool_end" | "tool_error", detail?: unknown) => {
+    if (typeof emitStatus === "function") {
+      emitStatus({ stage, tool: "skills", detail, requestId });
+    }
+  };
+
+  const wrap = (methodName: string) => async (...args: any[]) => {
+    const targetPath = typeof args[0] === "string" ? args[0] : "";
+    const isSkillPath = targetPath.startsWith("/skills/");
+    if (isSkillPath) {
+      notify("tool_start", { action: methodName, path: targetPath });
+    }
+    try {
+      const result = await backend[methodName](...args);
+      if (isSkillPath) {
+        const size = typeof result === "string" ? result.length : undefined;
+        notify("tool_end", { action: methodName, path: targetPath, size });
+      }
+      return result;
+    } catch (error: any) {
+      if (isSkillPath) {
+        notify("tool_error", { action: methodName, path: targetPath, error: error?.message ?? String(error) });
+      }
+      throw error;
+    }
+  };
+
+  return {
+    lsInfo: wrap("lsInfo"),
+    read: wrap("read"),
+    readRaw: wrap("readRaw"),
+    grepRaw: wrap("grepRaw"),
+    globInfo: wrap("globInfo"),
+    write: wrap("write"),
+    edit: wrap("edit"),
+    uploadFiles: wrap("uploadFiles"),
+    downloadFiles: wrap("downloadFiles"),
+  };
 }
 
 interface JsonRpcRequest {
@@ -484,6 +547,8 @@ rl.on("line", async (line: string) => {
     try {
       if (method === "sendMessage") {
         result = await sendMessage(params);
+      } else if (method === "warmup") {
+        result = await warmup(params);
       } else if (method === "ping") {
         result = "pong";
       } else {

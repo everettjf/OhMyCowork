@@ -33,3 +33,12 @@ export async function sendMessage(
 export async function pingSidecar(): Promise<string> {
   return invoke<string>("ping_sidecar");
 }
+
+export async function warmupModel(config: AgentConfig): Promise<string> {
+  return invoke<string>("warmup_model", {
+    provider: config.provider,
+    apiKey: config.apiKey,
+    model: config.model,
+    baseUrl: config.baseUrl ?? null,
+  });
+}

@@ -99,14 +99,22 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
               }
             }
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               url,
               status: response.status,
               statusText: response.statusText,
               headers: Object.fromEntries(response.headers.entries()),
               body: responseBody,
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              url,
+              status: resultPayload.status,
+              statusText: resultPayload.statusText,
+              contentType: resultPayload.headers?.["content-type"],
+              bodyLength: typeof responseBody === "string" ? responseBody.length : undefined,
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "parse_html": {
@@ -139,17 +147,22 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
                 }
               });
 
-              notify("tool_end", { operation });
-              return JSON.stringify({
+              const resultPayload = {
                 selector,
                 matchCount: results.length,
                 results: results.slice(0, 50),
-              }, null, 2);
+              };
+              notify("tool_end", {
+                operation,
+                selector,
+                matchCount: resultPayload.matchCount,
+                sample: resultPayload.results?.slice(0, 5),
+              });
+              return JSON.stringify(resultPayload, null, 2);
             }
 
             // Return document structure
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               title: $("title").text(),
               headings: {
                 h1: $("h1").map((i, el) => $(el).text()).get(),
@@ -163,7 +176,14 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
                 src: $(el).attr("src"),
                 alt: $(el).attr("alt"),
               })).get().slice(0, 10),
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              title: resultPayload.title,
+              h1Count: resultPayload.headings?.h1?.length,
+              linkCount: resultPayload.links?.length,
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "extract_links": {
@@ -203,12 +223,18 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
               }
             });
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               source: url || "provided html",
               totalLinks: links.length,
               links: links.slice(0, 100),
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              source: resultPayload.source,
+              totalLinks: resultPayload.totalLinks,
+              sample: resultPayload.links?.slice(0, 5),
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "extract_text": {
@@ -234,13 +260,19 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
               .replace(/\s+/g, " ")
               .trim();
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               source: url || "provided html",
               selector: targetSelector,
               textLength: text.length,
               text: text.slice(0, 10000),
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              source: resultPayload.source,
+              selector: resultPayload.selector,
+              textLength: resultPayload.textLength,
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "parse_rss": {
@@ -260,15 +292,21 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
               categories: item.categories,
             }));
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               feedTitle: feed.title,
               feedLink: feed.link,
               feedDescription: feed.description,
               lastBuildDate: feed.lastBuildDate,
               itemCount: feed.items.length,
               items,
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              feedTitle: resultPayload.feedTitle,
+              itemCount: resultPayload.itemCount,
+              sample: resultPayload.items?.slice(0, 3),
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "download_file": {
@@ -290,13 +328,14 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
             await fs.promises.mkdir(path.dirname(fullOutputPath), { recursive: true });
             await fs.promises.writeFile(fullOutputPath, buffer);
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               url,
               savedTo: outputPath,
               size: buffer.length,
               contentType: response.headers.get("content-type"),
-            }, null, 2);
+            };
+            notify("tool_end", resultPayload);
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           case "parse_json_api": {
@@ -335,15 +374,21 @@ export function createWebOperationsTool({ workspaceRoot, requestId, emitStatus }
               return typeof obj;
             };
 
-            notify("tool_end", { operation });
-            return JSON.stringify({
+            const resultPayload = {
               url,
               status: response.status,
               structure: analyzeStructure(data),
               data: JSON.stringify(data).length > 10000
                 ? { note: "Response too large, showing structure only", sample: JSON.stringify(data).slice(0, 2000) }
                 : data,
-            }, null, 2);
+            };
+            notify("tool_end", {
+              operation,
+              url,
+              status: resultPayload.status,
+              structure: resultPayload.structure,
+            });
+            return JSON.stringify(resultPayload, null, 2);
           }
 
           default:
