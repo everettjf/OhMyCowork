@@ -15,9 +15,10 @@ import {
   AssistantRuntimeProvider,
   type ChatModelAdapter,
   useLocalRuntime,
+  useRemoteThreadListRuntime,
   useThreadList,
 } from "@assistant-ui/react";
-import { Thread, ThreadList } from "@assistant-ui/react-ui";
+import { Thread } from "@assistant-ui/react-ui";
 import {
   Sparkles,
   Settings,
@@ -42,7 +43,9 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { createThreadHistoryAdapter } from "@/lib/threadHistory";
+import { createThreadHistoryAdapter, updateThreadTitle } from "@/lib/threadHistory";
+import { createThreadListAdapter } from "@/lib/threadListAdapter";
+import { ThreadListCustom } from "@/components/ThreadListCustom";
 
 type StreamController = {
   push: (delta: string) => void;
@@ -282,6 +285,7 @@ function StudioShell({
   saveSettings: ReturnType<typeof useSettings>["saveSettings"];
   workspaceByThreadId: Record<string, string>;
   setWorkspaceByThreadId: Dispatch<SetStateAction<Record<string, string>>>;
+  onActiveThreadChange: (threadId: string) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -300,6 +304,10 @@ function StudioShell({
 
   const activeThreadId = useThreadList((t) => t.mainThreadId);
   const activeWorkspacePath = workspaceByThreadId[activeThreadId];
+
+  useEffect(() => {
+    if (activeThreadId) onActiveThreadChange(activeThreadId);
+  }, [activeThreadId, onActiveThreadChange]);
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
@@ -450,7 +458,7 @@ function StudioShell({
               </div>
             </div>
             <div className="min-h-0 flex-1">
-              <ThreadList />
+              <ThreadListCustom />
             </div>
             <div className="mt-3 border-t border-[var(--surface-border)] pt-3">
               <div className="flex flex-col gap-2">
@@ -928,8 +936,55 @@ function App() {
     []
   );
 
-  const historyAdapter = useMemo(() => createThreadHistoryAdapter(), []);
-  const runtime = useLocalRuntime(adapter, { adapters: { history: historyAdapter } });
+  const historyThreadIdRef = useRef<string>("main");
+  const generateThreadTitle = useCallback(
+    async (threadId: string, text: string) => {
+      const current = settingsRef.current;
+      const providerConfig = current.providers[current.activeProvider];
+      const fallback = text.length > 42 ? `${text.slice(0, 42)}…` : text;
+      if (!providerConfig?.apiKey || !providerConfig?.model) {
+        await updateThreadTitle(threadId, fallback || "New Chat");
+        return;
+      }
+      const requestId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `title-${Date.now()}`;
+      const title = await sendMessage(
+        {
+          provider: current.activeProvider,
+          apiKey: providerConfig.apiKey,
+          model: providerConfig.model,
+          baseUrl: providerConfig.baseUrl,
+        },
+        [
+          { role: "system", content: "Create a concise chat title (max 6 words). Return plain text only." },
+          { role: "user", content: text },
+        ],
+        requestId,
+        null
+      );
+      const cleaned = title.replace(/[\r\n]+/g, " ").trim();
+      await updateThreadTitle(threadId, cleaned || fallback || "New Chat");
+    },
+    []
+  );
+  const historyAdapter = useMemo(
+    () => createThreadHistoryAdapter(() => historyThreadIdRef.current, generateThreadTitle),
+    [generateThreadTitle]
+  );
+  const threadListAdapter = useMemo(
+    () =>
+      createThreadListAdapter({
+        getSettings: () => settingsRef.current,
+      }),
+    []
+  );
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: () => useLocalRuntime(adapter, { adapters: { history: historyAdapter } }),
+    allowNesting: true,
+  });
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -992,6 +1047,9 @@ function App() {
         saveSettings={saveSettings}
         workspaceByThreadId={workspaceByThreadId}
         setWorkspaceByThreadId={setWorkspaceByThreadId}
+        onActiveThreadChange={(threadId) => {
+          historyThreadIdRef.current = threadId;
+        }}
       />
     </AssistantRuntimeProvider>
   );

@@ -23,7 +23,7 @@ import {
   Link2,
   Settings,
   SlidersHorizontal,
-  Archive,
+  MessageSquare,
   Sun,
   Moon,
   Monitor,
@@ -32,6 +32,9 @@ import {
 import { ProviderId, ProviderPreset, PROVIDER_PRESETS } from "@/lib/providers";
 import type { Settings as SettingsType } from "@/hooks/useSettings";
 import { useTheme } from "@/hooks/useTheme";
+import { listThreads, loadThreadHistory, formatThreadHistoryMarkdown } from "@/lib/threadHistory";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -44,7 +47,7 @@ interface SettingsPanelProps {
 const navIcons: Record<string, React.ReactNode> = {
   General: <Settings className="h-4 w-4" />,
   Models: <SlidersHorizontal className="h-4 w-4" />,
-  Memory: <Archive className="h-4 w-4" />,
+  Threads: <MessageSquare className="h-4 w-4" />,
   About: <Info className="h-4 w-4" />,
 };
 
@@ -58,6 +61,7 @@ export function SettingsPanel({
   const [draft, setDraft] = useState<SettingsType>(settings);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [activeNav, setActiveNav] = useState("General");
   const { theme, setTheme, resolvedTheme } = useTheme();
 
@@ -83,7 +87,7 @@ export function SettingsPanel({
   const navItems = [
     "General",
     "Models",
-    "Memory",
+    "Threads",
     "About",
   ];
   const updateProviderField = (providerId: ProviderId, field: "apiKey" | "model" | "baseUrl", value: string) => {
@@ -135,6 +139,32 @@ export function SettingsPanel({
       setError(err instanceof Error ? err.message : "Failed to save settings.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      setExporting(true);
+      const threads = await listThreads();
+      const sections: string[] = [];
+      sections.push("# Chat History Export");
+      sections.push("");
+      for (const thread of threads) {
+        const repo = await loadThreadHistory(thread.id);
+        sections.push(formatThreadHistoryMarkdown(repo, thread.title || "New Chat"));
+        sections.push("");
+      }
+      const selected = await saveDialog({
+        title: "Export chat history",
+        defaultPath: "chat_history.md",
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!selected) return;
+      await writeTextFile(selected, sections.join("\n"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export chat history.");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -364,6 +394,40 @@ export function SettingsPanel({
                       className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50"
                     >
                       {saving ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : activeNav === "Threads" ? (
+              <>
+                <div className="shrink-0 px-6 pb-4 pt-6">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2.5 text-xl font-semibold">
+                      <MessageSquare className="h-5 w-5 text-blue-400" />
+                      Threads
+                    </DialogTitle>
+                    <DialogDescription className="mt-1.5 text-sm text-muted-foreground">
+                      Export your chat history.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-4 h-px bg-gradient-to-r from-[var(--surface-divider)] via-[var(--surface-elevated)] to-transparent" />
+                </div>
+
+                <div className="flex-1 overflow-auto px-6 pb-6">
+                  <div className="rounded-xl border border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] p-5">
+                    <div className="mb-4">
+                      <div className="text-sm font-medium">Export all threads</div>
+                      <p className="mt-0.5 text-xs text-muted-foreground/50">
+                        Export the full chat history as Markdown.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="border-[var(--surface-border-subtle)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)]"
+                      onClick={() => void handleExportAll()}
+                      disabled={exporting}
+                    >
+                      {exporting ? "Exporting..." : "Export Markdown"}
                     </Button>
                   </div>
                 </div>
