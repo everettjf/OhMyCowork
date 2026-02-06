@@ -22,7 +22,7 @@ const WelcomeAvatar: FC = () => {
   return (
     <div className="aui-avatar-root">
       <div className="aui-avatar-fallback text-muted-foreground">
-        <AvatarIcon className="h-4 w-4" />
+        <AvatarIcon className="h-5 w-5" />
       </div>
     </div>
   );
