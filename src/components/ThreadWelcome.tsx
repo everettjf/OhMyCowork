@@ -53,7 +53,7 @@ const WelcomeSuggestions: FC = () => {
           autoSend
         >
           <span className="aui-thread-welcome-suggestion-text">
-            {suggestion.text ?? suggestion.prompt}
+            {suggestion.prompt}
           </span>
         </ThreadPrimitive.Suggestion>
       ))}

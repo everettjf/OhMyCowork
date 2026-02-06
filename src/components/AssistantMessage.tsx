@@ -8,7 +8,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 
 type ToolResultJson = Record<string, unknown>;
 
-const extractToolSummary = (toolName: string, argsText?: string) => {
+const extractToolSummary = (_toolName: string, argsText?: string) => {
   if (!argsText) return "";
   try {
     const parsed = JSON.parse(argsText);

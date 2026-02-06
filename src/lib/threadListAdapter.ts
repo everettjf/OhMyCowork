@@ -1,4 +1,4 @@
-import type { RemoteThreadListAdapter, RemoteThreadListResponse, RemoteThreadMetadata } from "@assistant-ui/react";
+import type { unstable_RemoteThreadListAdapter as RemoteThreadListAdapter } from "@assistant-ui/react";
 import type { AssistantStreamChunk, AssistantStream } from "assistant-stream";
 import { sendMessage, type AgentConfig } from "@/services/agent";
 import { ensureThread, listThreads, updateThreadTitle, setThreadStatus, deleteThread } from "@/lib/threadHistory";
@@ -84,7 +84,7 @@ const getFirstUserMessage = (messages: readonly any[]) => {
 export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdapter => {
   const setPending = useThreadTitleStatus.getState().setPending;
   return {
-    async list(): Promise<RemoteThreadListResponse> {
+    async list() {
       const threads = await listThreads();
       return {
         threads: threads.map((t) => ({
@@ -98,7 +98,7 @@ export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdap
     async initialize(threadId: string) {
       return { remoteId: threadId, externalId: undefined };
     },
-    async fetch(threadId: string): Promise<RemoteThreadMetadata> {
+    async fetch(threadId: string) {
       // Always start in a new thread on app boot.
       if (threadId === "main") {
         await ensureThread(threadId);

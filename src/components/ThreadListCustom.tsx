@@ -79,8 +79,10 @@ export const ThreadListCustom = () => {
   };
 
   const handleDelete = async () => {
+    const target = menu;
+    if (!target) return;
     closeMenu();
-    await aui.threads().item({ id: menu.threadId }).delete();
+    await aui.threads().item({ id: target.threadId }).delete();
   };
 
   useEffect(() => {

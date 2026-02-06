@@ -14,6 +14,7 @@ import { readDir } from "@tauri-apps/plugin-fs";
 import {
   AssistantRuntimeProvider,
   type ChatModelAdapter,
+  type ThreadAssistantMessagePart,
   useLocalRuntime,
   unstable_useRemoteThreadListRuntime,
   useThreadList,
@@ -49,6 +50,7 @@ import { useThreadTitleStatus } from "@/stores/threadTitleStatus";
 import { useThreadResponseStatus } from "@/stores/threadResponseStatus";
 import { createThreadListAdapter } from "@/lib/threadListAdapter";
 import { ThreadListCustom } from "@/components/ThreadListCustom";
+import type { ReadonlyJSONObject } from "assistant-stream/utils";
 
 type StreamController = {
   push: (delta: string) => void;
@@ -154,10 +156,16 @@ type ToolCallPart = {
   type: "tool-call";
   toolCallId: string;
   toolName: string;
-  args: unknown;
+  args: ReadonlyJSONObject;
   argsText: string;
   result?: unknown;
   isError?: boolean;
+  artifact?: unknown;
+  interrupt?: {
+    type: "human";
+    payload: unknown;
+  };
+  parentId?: string;
 };
 
 const safeStringify = (value: unknown, maxLength = 240) => {
@@ -749,7 +757,7 @@ function App() {
             let toolCounter = 0;
 
           const buildContentParts = () => {
-            const parts: Array<{ type: "text"; text: string } | ToolCallPart> = [];
+            const parts: ThreadAssistantMessagePart[] = [];
             if (streamedText) parts.push({ type: "text", text: streamedText });
             for (const id of toolCallOrder) {
               const part = toolCalls.get(id);
@@ -783,14 +791,15 @@ function App() {
               lastSignature = signature;
               return { content: parts };
             } catch {
-              return { content: [{ type: "text", text: streamedText }] };
+              const fallbackParts: ThreadAssistantMessagePart[] = [{ type: "text", text: streamedText }];
+              return { content: fallbackParts };
             }
           };
 
           const createToolCall = (toolName: string, detail: unknown) => {
             const toolCallId = `${requestId}-tool-${toolCounter++}`;
             const argsText = formatToolArgsText(detail);
-            const args = argsText ? { detail: argsText } : {};
+            const args = (argsText ? { detail: argsText } : {}) as ReadonlyJSONObject;
             const part: ToolCallPart = {
               type: "tool-call",
               toolCallId,
@@ -869,35 +878,46 @@ function App() {
 
           let textDone = false;
           let toolDone = false;
-          let textNext = streamController.iterator.next().then((res) => ({ source: "text" as const, res }));
-          let toolNext = toolStreamController.iterator.next().then((res) => ({ source: "tool" as const, res }));
+          type PendingResult =
+            | { source: "text"; res: IteratorResult<string, void> }
+            | { source: "tool"; res: IteratorResult<ToolStatusPayload, void> }
+            | { source: "done" }
+            | { source: "error"; err: unknown };
+
+          let textNext: Promise<PendingResult> = streamController.iterator
+            .next()
+            .then((res) => ({ source: "text" as const, res }));
+          let toolNext: Promise<PendingResult> = toolStreamController.iterator
+            .next()
+            .then((res) => ({ source: "tool" as const, res }));
           let sendDone = false;
-          const doneNext = sendPromise
+          const doneNext: Promise<PendingResult> = sendPromise
             .then(() => ({ source: "done" as const }))
             .catch((err) => ({ source: "error" as const, err }));
 
           while (!textDone || !toolDone || !sendDone) {
-            const pending = [];
+            const pending: Array<Promise<PendingResult>> = [];
             if (!textDone) pending.push(textNext);
             if (!toolDone) pending.push(toolNext);
             if (!sendDone) pending.push(doneNext);
             if (!pending.length) break;
 
-            const { source, res } = await Promise.race(pending);
-            if (source === "done") {
+            const raced = await Promise.race(pending);
+            if (raced.source === "done") {
               sendDone = true;
               textDone = true;
               toolDone = true;
               streamController.close();
               toolStreamController.close();
-            } else if (source === "error") {
+            } else if (raced.source === "error") {
               sendDone = true;
               textDone = true;
               toolDone = true;
               streamController.close();
               toolStreamController.close();
-              sendError = res?.err ?? sendError;
-            } else if (source === "text") {
+              sendError = raced.err ?? sendError;
+            } else if (raced.source === "text") {
+              const { res } = raced;
               if (res.done) {
                 textDone = true;
               } else if (res.value) {
@@ -909,6 +929,7 @@ function App() {
                 textNext = streamController.iterator.next().then((nextRes) => ({ source: "text" as const, res: nextRes }));
               }
             } else {
+              const { res } = raced;
               if (res.done) {
                 toolDone = true;
               } else if (res.value) {
@@ -927,7 +948,7 @@ function App() {
           if (sendError) {
             const message = sendError instanceof Error ? sendError.message : String(sendError);
             yield { content: [{ type: "text", text: `Error: ${message}` }] };
-            yield { status: { type: "complete", reason: "error" } };
+            yield { status: { type: "incomplete", reason: "error" } };
             return;
           }
           if (!streamedText && output) {
@@ -947,7 +968,7 @@ function App() {
             if (update) yield update;
           }
 
-            yield { status: { type: "complete", reason: "unknown" } };
+            yield { status: { type: "complete", reason: "stop" } };
           } finally {
             endThreadResponse(threadId);
           }
