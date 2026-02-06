@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { PlusIcon, ArchiveIcon, Pencil, Download, Trash2 } from "lucide-react";
+import { PlusIcon, ArchiveIcon, Pencil, Download, Trash2, Loader2 } from "lucide-react";
 import { ThreadListPrimitive, ThreadListItemPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { formatThreadHistoryMarkdown, loadThreadHistory } from "@/lib/threadHistory";
+import { useThreadTitleStatus } from "@/stores/threadTitleStatus";
+import { useThreadResponseStatus } from "@/stores/threadResponseStatus";
 
 type ContextMenuState = {
   x: number;
@@ -18,6 +20,9 @@ const sanitizeFileName = (value: string) =>
 const ThreadListItemCustom = ({ onContextMenu }: { onContextMenu: (event: React.MouseEvent, threadId: string, title: string) => void }) => {
   const title = useAuiState(({ threadListItem }) => threadListItem.title ?? "New Chat");
   const threadId = useAuiState(({ threadListItem }) => threadListItem.remoteId ?? threadListItem.id);
+  const isTitlePending = useThreadTitleStatus((state) => !!state.pending[threadId]);
+  const isResponding = useThreadResponseStatus((state) => (state.pending[threadId] ?? 0) > 0);
+  const isPending = isTitlePending || isResponding;
 
   return (
     <ThreadListItemPrimitive.Root className="aui-thread-list-item">
@@ -25,7 +30,8 @@ const ThreadListItemCustom = ({ onContextMenu }: { onContextMenu: (event: React.
         className="aui-thread-list-item-trigger"
         onContextMenu={(event) => onContextMenu(event, threadId, title)}
       >
-        <p className="aui-thread-list-item-title">
+        <p className="aui-thread-list-item-title flex items-center">
+          {isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
           <ThreadListItemPrimitive.Title fallback="New Chat" />
         </p>
       </ThreadListItemPrimitive.Trigger>

@@ -2,6 +2,7 @@ import type { RemoteThreadListAdapter, RemoteThreadListResponse, RemoteThreadMet
 import type { AssistantStreamChunk, AssistantStream } from "assistant-stream";
 import { sendMessage, type AgentConfig } from "@/services/agent";
 import { ensureThread, listThreads, updateThreadTitle, setThreadStatus, deleteThread } from "@/lib/threadHistory";
+import { useThreadTitleStatus } from "@/stores/threadTitleStatus";
 
 type AdapterDeps = {
   getSettings: () => {
@@ -81,6 +82,7 @@ const getFirstUserMessage = (messages: readonly any[]) => {
 };
 
 export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdapter => {
+  const setPending = useThreadTitleStatus.getState().setPending;
   return {
     async list(): Promise<RemoteThreadListResponse> {
       const threads = await listThreads();
@@ -129,6 +131,7 @@ export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdap
       await deleteThread(remoteId);
     },
     async generateTitle(remoteId: string, unstable_messages: readonly any[]): Promise<AssistantStream> {
+      setPending(remoteId, true);
       const firstMessage = getFirstUserMessage(unstable_messages);
       let title = fallbackTitle(firstMessage);
       try {
@@ -138,6 +141,7 @@ export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdap
         // fallback already set
       }
       await updateThreadTitle(remoteId, title);
+      setPending(remoteId, false);
       return createTitleStream(title);
     },
   };

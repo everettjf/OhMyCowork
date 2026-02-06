@@ -45,6 +45,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PROVIDER_PRESETS } from "@/lib/providers";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { createThreadHistoryAdapter, updateThreadTitle } from "@/lib/threadHistory";
+import { useThreadTitleStatus } from "@/stores/threadTitleStatus";
+import { useThreadResponseStatus } from "@/stores/threadResponseStatus";
 import { createThreadListAdapter } from "@/lib/threadListAdapter";
 import { ThreadListCustom } from "@/components/ThreadListCustom";
 
@@ -707,6 +709,8 @@ function App() {
 
   const streamByRequestIdRef = useRef<Record<string, StreamController>>({});
   const toolStreamByRequestIdRef = useRef<Record<string, EventStreamController<ToolStatusPayload>>>({});
+  const beginThreadResponse = useThreadResponseStatus.getState().begin;
+  const endThreadResponse = useThreadResponseStatus.getState().end;
 
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
@@ -718,6 +722,8 @@ function App() {
         if (!providerConfig?.apiKey || !providerConfig?.model) {
           throw new Error("Provider API key or model missing. Open settings to configure.");
         }
+
+        beginThreadResponse(threadId);
 
         const requestId =
           typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -734,12 +740,13 @@ function App() {
         toolStreamByRequestIdRef.current[requestId] = toolStreamController;
 
         return (async function* () {
-          let streamedText = "";
-          let lastSignature = "";
-          const toolCalls = new Map<string, ToolCallPart>();
-          const toolCallOrder: string[] = [];
-          const openToolCallsByName = new Map<string, string[]>();
-          let toolCounter = 0;
+          try {
+            let streamedText = "";
+            let lastSignature = "";
+            const toolCalls = new Map<string, ToolCallPart>();
+            const toolCallOrder: string[] = [];
+            const openToolCallsByName = new Map<string, string[]>();
+            let toolCounter = 0;
 
           const buildContentParts = () => {
             const parts: Array<{ type: "text"; text: string } | ToolCallPart> = [];
@@ -940,42 +947,52 @@ function App() {
             if (update) yield update;
           }
 
-          yield { status: { type: "complete", reason: "unknown" } };
+            yield { status: { type: "complete", reason: "unknown" } };
+          } finally {
+            endThreadResponse(threadId);
+          }
         })();
       },
     }),
     []
   );
 
+  const setTitlePending = useThreadTitleStatus.getState().setPending;
   const generateThreadTitle = useCallback(
     async (threadId: string, text: string) => {
+      setTitlePending(threadId, true);
       const current = settingsRef.current;
       const providerConfig = current.providers[current.activeProvider];
       const fallback = text.length > 42 ? `${text.slice(0, 42)}…` : text;
       if (!providerConfig?.apiKey || !providerConfig?.model) {
         await updateThreadTitle(threadId, fallback || "New Chat");
+        setTitlePending(threadId, false);
         return;
       }
       const requestId =
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
           : `title-${Date.now()}`;
-      const title = await sendMessage(
-        {
-          provider: current.activeProvider,
-          apiKey: providerConfig.apiKey,
-          model: providerConfig.model,
-          baseUrl: providerConfig.baseUrl,
-        },
-        [
-          { role: "system", content: "Create a concise chat title (max 6 words). Return plain text only." },
-          { role: "user", content: text },
-        ],
-        requestId,
-        null
-      );
-      const cleaned = title.replace(/[\r\n]+/g, " ").replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
-      await updateThreadTitle(threadId, cleaned || fallback || "New Chat");
+      try {
+        const title = await sendMessage(
+          {
+            provider: current.activeProvider,
+            apiKey: providerConfig.apiKey,
+            model: providerConfig.model,
+            baseUrl: providerConfig.baseUrl,
+          },
+          [
+            { role: "system", content: "Create a concise chat title (max 6 words). Return plain text only." },
+            { role: "user", content: text },
+          ],
+          requestId,
+          null
+        );
+        const cleaned = title.replace(/[\r\n]+/g, " ").replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+        await updateThreadTitle(threadId, cleaned || fallback || "New Chat");
+      } finally {
+        setTitlePending(threadId, false);
+      }
     },
     []
   );
