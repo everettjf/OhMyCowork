@@ -13,7 +13,7 @@ export function createRandomNumberTool({ requestId, emitStatus }: ToolContext) {
       const factor = 10 ** Math.max(0, Math.min(6, decimals));
       const value = Math.floor((Math.random() * (high - low) + low) * factor) / factor;
       const result = { value, min: low, max: high, decimals: Math.max(0, Math.min(6, decimals)) };
-      notify("tool_end");
+      notify("tool_end", result);
       return result;
     },
     {

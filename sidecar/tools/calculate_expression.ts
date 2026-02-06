@@ -22,7 +22,7 @@ export function createCalculateExpressionTool({ requestId, emitStatus }: ToolCon
       notify("tool_start", { expression });
       const value = safeEval(expression);
       const result = { expression, value };
-      notify("tool_end");
+      notify("tool_end", result);
       return result;
     },
     {

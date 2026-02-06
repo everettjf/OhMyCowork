@@ -13,7 +13,7 @@ export function createGetTimezoneTool({ requestId, emitStatus }: ToolContext) {
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         offsetMinutes: -now.getTimezoneOffset(),
       };
-      notify("tool_end");
+      notify("tool_end", result);
       return result;
     },
     {

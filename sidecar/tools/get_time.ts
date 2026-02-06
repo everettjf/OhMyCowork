@@ -14,7 +14,7 @@ export function createGetTimeTool({ requestId, emitStatus }: ToolContext) {
         locale: now.toLocaleString(),
         epochMs: now.getTime(),
       };
-      notify("tool_end");
+      notify("tool_end", result);
       return result;
     },
     {

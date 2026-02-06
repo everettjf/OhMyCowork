@@ -337,8 +337,9 @@ function StudioShell({
             <div className="mb-3 flex items-center gap-2">
               <Bot className="h-5 w-5 text-orange-600" />
               <div>
-                <div className="text-sm font-semibold">OhMyCowork</div>
-                <div className="text-[11px] text-muted-foreground">AI Workspace</div>
+                <div className="text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-amber-400 to-rose-500">
+                  OhMyCowork
+                </div>
               </div>
             </div>
             <div className="min-h-0 flex-1">
@@ -405,9 +406,14 @@ function StudioShell({
               <aside className="flex min-h-0 flex-col bg-panel-deep/95 backdrop-blur-md">
                 <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-3 py-2">
                   <div className="text-sm font-semibold">Workspace</div>
-                  <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
-                    {activeWorkspacePath ? "Change" : "Open"}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" onClick={() => void handleSelectWorkspace()}>
+                      {activeWorkspacePath ? "Change" : "Open Workspace"}
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => setStudioOpen(false)} aria-label="Collapse workspace">
+                      <PanelRight className="h-4 w-4 rotate-180" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col p-3">

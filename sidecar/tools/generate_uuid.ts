@@ -9,7 +9,7 @@ export function createGenerateUuidTool({ requestId, emitStatus }: ToolContext) {
     async () => {
       notify("tool_start");
       const result = { uuid: crypto.randomUUID() };
-      notify("tool_end");
+      notify("tool_end", result);
       return result;
     },
     {

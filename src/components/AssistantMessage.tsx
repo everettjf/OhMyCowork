@@ -1,5 +1,5 @@
 import type { FC, PropsWithChildren } from "react";
-import { Fragment } from "react";
+import { Children, Fragment } from "react";
 import { MessagePrimitive, type ToolCallMessagePartProps } from "@assistant-ui/react";
 import { AssistantActionBar, BranchPicker, makeMarkdownText } from "@assistant-ui/react-ui";
 import { getAvatarIcon } from "@/components/avatarIcons";
@@ -173,13 +173,15 @@ const ToolGroup: FC<PropsWithChildren<{ startIndex: number; endIndex: number }>>
   startIndex,
   endIndex,
 }) => {
-  const count = endIndex - startIndex + 1;
+  const childrenArray = Children.toArray(children).filter(Boolean);
+  const count = childrenArray.length;
+  if (count === 0) return null;
   return (
     <details className="my-3 rounded-lg border border-[var(--surface-border)] bg-panel-inset px-3 py-2">
       <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
         Tool calls • {count}
       </summary>
-      <div className="mt-2 space-y-2">{children}</div>
+      <div className="mt-2 space-y-2">{childrenArray}</div>
     </details>
   );
 };
@@ -210,6 +212,22 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
   const argsJson = parseJson(argsText);
   const resultText = typeof result === "string" ? result : result != null ? JSON.stringify(result, null, 2) : "";
   const resultJson = parseJson(resultText);
+
+  if (toolName === "skills") {
+    const skillPath =
+      (typeof resultJson?.path === "string" && (resultJson.path as string)) ||
+      (typeof argsJson?.path === "string" && (argsJson.path as string)) ||
+      "";
+    const rawText = `${argsText ?? ""}\n${resultText ?? ""}`;
+    if (
+      skillPath.startsWith("/skills/user/") ||
+      skillPath.startsWith("/skills/project/") ||
+      rawText.includes("/skills/user/") ||
+      rawText.includes("/skills/project/")
+    ) {
+      return null;
+    }
+  }
 
   if (toolName === "web_operations") {
     return <WebOpCard args={argsJson} result={resultJson} />;
