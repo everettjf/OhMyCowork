@@ -383,9 +383,9 @@ function StudioShell({
                   welcome={{
                     message: "Welcome. Talk through ideas, then shape them into clear output.",
                     suggestions: [
-                      { prompt: "Plan a new UI architecture for this repository", text: "UI Architecture Plan" },
-                      { prompt: "Create a refactor plan based on the current workspace", text: "Refactor Plan" },
-                      { prompt: "List the next test checklist items", text: "Test Checklist" },
+                      { prompt: "Hello, what can you do?", text: "What can you do?" },
+                      { prompt: "What is the current date and time?", text: "Current Time" },
+                      { prompt: "Read the website https://xnu.app and summarize its content", text: "Read xnu.app" },
                     ],
                   }}
                   components={{
