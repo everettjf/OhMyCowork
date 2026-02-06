@@ -94,10 +94,14 @@ export const createThreadListAdapter = (deps: AdapterDeps): RemoteThreadListAdap
       };
     },
     async initialize(threadId: string) {
-      await ensureThread(threadId);
       return { remoteId: threadId, externalId: undefined };
     },
     async fetch(threadId: string): Promise<RemoteThreadMetadata> {
+      // Always start in a new thread on app boot.
+      if (threadId === "main") {
+        await ensureThread(threadId);
+        return { remoteId: threadId, externalId: undefined, title: "New Chat", status: "regular" };
+      }
       const threads = await listThreads();
       const found = threads.find((t) => t.id === threadId);
       if (!found) throw new Error("Thread not found");

@@ -147,8 +147,13 @@ const saveThreadStore = async (data: ThreadStoreData): Promise<void> => {
 export const listThreads = async (): Promise<ThreadMetadata[]> => {
   const data = await loadThreadStore();
   return data.order
-    .map((id) => data.threads[id])
-    .filter(Boolean);
+    .map((id) => {
+      const thread = data.threads[id];
+      const history = data.histories[id];
+      if (!thread || !history || history.messages.length === 0) return null;
+      return thread;
+    })
+    .filter(Boolean) as ThreadMetadata[];
 };
 
 export const ensureThread = async (threadId: string): Promise<void> => {
@@ -212,6 +217,17 @@ export const loadThreadHistory = async (threadId: string): Promise<ExportedMessa
 
 export const appendThreadHistory = async (threadId: string, item: ExportedMessageRepositoryItem): Promise<void> => {
   const data = await loadThreadStore();
+  if (!data.threads[threadId]) {
+    const timestamp = nowIso();
+    data.threads[threadId] = {
+      id: threadId,
+      title: "New Chat",
+      status: "regular",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    data.order = [threadId, ...data.order.filter((id) => id !== threadId)];
+  }
   if (!data.histories[threadId]) {
     data.histories[threadId] = { messages: [], headId: null };
   }

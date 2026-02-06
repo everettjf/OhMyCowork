@@ -15,9 +15,10 @@ import {
   AssistantRuntimeProvider,
   type ChatModelAdapter,
   useLocalRuntime,
-  useRemoteThreadListRuntime,
+  unstable_useRemoteThreadListRuntime,
   useThreadList,
 } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/store";
 import { Thread } from "@assistant-ui/react-ui";
 import {
   Sparkles,
@@ -285,13 +286,12 @@ function StudioShell({
   saveSettings: ReturnType<typeof useSettings>["saveSettings"];
   workspaceByThreadId: Record<string, string>;
   setWorkspaceByThreadId: Dispatch<SetStateAction<Record<string, string>>>;
-  onActiveThreadChange: (threadId: string) => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
   const [leftWidth, setLeftWidth] = useState(260);
-  const [rightWidth, setRightWidth] = useState(420);
+  const [rightWidth, setRightWidth] = useState(280);
 
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
@@ -304,10 +304,20 @@ function StudioShell({
 
   const activeThreadId = useThreadList((t) => t.mainThreadId);
   const activeWorkspacePath = workspaceByThreadId[activeThreadId];
+  const aui = useAui();
+  const startedRef = useRef(false);
+  const isThreadListLoading = useThreadList((t) => t.isLoading);
+  const newThreadId = useThreadList((t) => t.newThreadId);
 
   useEffect(() => {
-    if (activeThreadId) onActiveThreadChange(activeThreadId);
-  }, [activeThreadId, onActiveThreadChange]);
+    if (startedRef.current) return;
+    if (isThreadListLoading) return;
+    if (!newThreadId) return;
+    startedRef.current = true;
+    aui.threads().switchToNewThread();
+  }, [aui, isThreadListLoading, newThreadId]);
+
+  // active thread tracking handled per-thread runtime
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
@@ -519,7 +529,6 @@ function StudioShell({
                     message: "Welcome. Talk through ideas, then shape them into clear output.",
                     suggestions: [
                       { prompt: "Hello, what can you do?", text: "What can you do?" },
-                      { prompt: "What is the current date and time?", text: "Current Time" },
                       { prompt: "Read the website https://xnu.app and summarize its content", text: "Read xnu.app" },
                       { prompt: "Organize my workspace", text: "Organize my workspace" },
                     ],
@@ -654,6 +663,8 @@ function StudioShell({
     </>
   );
 }
+
+// history is bound per thread runtime
 
 function App() {
   const { settings, saveSettings } = useSettings();
@@ -936,7 +947,6 @@ function App() {
     []
   );
 
-  const historyThreadIdRef = useRef<string>("main");
   const generateThreadTitle = useCallback(
     async (threadId: string, text: string) => {
       const current = settingsRef.current;
@@ -969,10 +979,6 @@ function App() {
     },
     []
   );
-  const historyAdapter = useMemo(
-    () => createThreadHistoryAdapter(() => historyThreadIdRef.current, generateThreadTitle),
-    [generateThreadTitle]
-  );
   const threadListAdapter = useMemo(
     () =>
       createThreadListAdapter({
@@ -980,9 +986,16 @@ function App() {
       }),
     []
   );
-  const runtime = useRemoteThreadListRuntime({
+  const runtime = unstable_useRemoteThreadListRuntime({
     adapter: threadListAdapter,
-    runtimeHook: () => useLocalRuntime(adapter, { adapters: { history: historyAdapter } }),
+    runtimeHook: () => {
+      const threadId = useAuiState(({ threadListItem }) => threadListItem.remoteId ?? threadListItem.id);
+      const historyAdapter = useMemo(
+        () => createThreadHistoryAdapter(() => threadId, generateThreadTitle),
+        [threadId, generateThreadTitle]
+      );
+      return useLocalRuntime(adapter, { adapters: { history: historyAdapter } });
+    },
     allowNesting: true,
   });
 
@@ -1047,9 +1060,6 @@ function App() {
         saveSettings={saveSettings}
         workspaceByThreadId={workspaceByThreadId}
         setWorkspaceByThreadId={setWorkspaceByThreadId}
-        onActiveThreadChange={(threadId) => {
-          historyThreadIdRef.current = threadId;
-        }}
       />
     </AssistantRuntimeProvider>
   );

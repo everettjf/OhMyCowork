@@ -290,7 +290,7 @@ const ToolCallCard: FC<ToolCallMessagePartProps> = ({
     >
       <summary className="flex cursor-pointer items-center justify-between gap-3 text-[11px] text-muted-foreground">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium text-foreground/80">{toolName}</span>
+          <span className="font-medium text-foreground/80">{toolName}</span>
           {summary ? <span className="truncate text-muted-foreground/80">{summary}</span> : null}
         </div>
         <span className="shrink-0 rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[10px]">
