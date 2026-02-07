@@ -5,7 +5,7 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 REPO_DIR="$ROOT_DIR"
 TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
-TAP_REPO="${TAP_REPO:-ohmyco/homebrew-tap}"
+TAP_REPO="${TAP_REPO:-everettjf/homebrew-tap}"
 CASK_PATH="${CASK_PATH:-Casks/OhMyCowork.rb}"
 
 require_cmd() {
